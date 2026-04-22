@@ -1,0 +1,69 @@
+{
+  "name": "Bollinger Squeeze Breakout",
+  "description": "Enter when price breaks out of tight Bollinger Bands (low volatility squeeze)",
+  "version": "1.0.0",
+  "author": "Shades Research",
+  
+  "entry": {
+    "long": [
+      {
+        "indicator": "close",
+        "operator": "crosses_above",
+        "value": "bb_upper",
+        "valueParams": { "period": 20, "stdDev": 2 }
+      },
+      {
+        "indicator": "volume",
+        "operator": "above",
+        "value": "volume_avg",
+        "valueParams": { "period": 20 }
+      }
+    ],
+    "short": [
+      {
+        "indicator": "close",
+        "operator": "crosses_below",
+        "value": "bb_lower",
+        "valueParams": { "period": 20, "stdDev": 2 }
+      },
+      {
+        "indicator": "volume",
+        "operator": "above",
+        "value": "volume_avg",
+        "valueParams": { "period": 20 }
+      }
+    ]
+  },
+  
+  "exit": {
+    "stopLoss": {
+      "type": "atr",
+      "value": 1.5
+    },
+    "target": {
+      "type": "atr",
+      "value": 3
+    },
+    "trailingStop": {
+      "type": "atr",
+      "activationR": 1,
+      "value": 2
+    }
+  },
+  
+  "filters": {
+    "trendFilter": {
+      "indicator": "adx",
+      "period": 14,
+      "condition": "strong",
+      "threshold": 20
+    }
+  },
+  
+  "config": {
+    "timeframes": ["1h", "4h", "1d"],
+    "instruments": ["TATAMOTORS", "BAJFINANCE", "ITC", "BHARTIARTL"],
+    "minConfidence": 0.7
+  }
+}
+

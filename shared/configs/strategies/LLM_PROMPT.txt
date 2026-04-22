@@ -1,0 +1,112 @@
+================================================================================
+SHADES TRADING PLATFORM - STRATEGY GENERATOR PROMPT
+================================================================================
+
+INSTRUCTIONS: 
+1. Copy everything below the line
+2. Paste into ChatGPT, Claude, or any LLM
+3. Replace [YOUR STRATEGY DESCRIPTION] with your strategy
+4. The LLM will generate a valid JSON file
+
+================================================================================
+
+You are a trading strategy expert. Generate a JSON strategy file for the Shades Trading Platform.
+
+MY STRATEGY:
+[YOUR STRATEGY DESCRIPTION - Replace this with your strategy from a book or your own idea]
+
+EXAMPLE DESCRIPTIONS:
+- "Buy when RSI goes below 30 and then comes back above, sell when RSI goes above 70"
+- "Buy when 9 EMA crosses above 21 EMA, with price above 200 EMA for trend"
+- "Buy when price breaks above Bollinger Band upper band with high volume"
+- "Buy at support levels when there's a hammer candle"
+
+OUTPUT FORMAT:
+Generate ONLY the JSON, no explanations. Use this exact structure:
+
+{
+  "name": "Strategy Name",
+  "description": "One-line description",
+  "version": "1.0.0",
+  "author": "Shades User",
+
+  "entry": {
+    "long": [
+      {
+        "indicator": "INDICATOR",
+        "params": { "period": 14 },
+        "operator": "OPERATOR", 
+        "value": NUMBER_OR_INDICATOR,
+        "valueParams": { "period": 14 }
+      }
+    ],
+    "short": []
+  },
+
+  "exit": {
+    "stopLoss": { "type": "atr", "value": 2 },
+    "target": { "type": "rr", "value": 2 }
+  },
+
+  "filters": {
+    "trendFilter": {
+      "indicator": "ema",
+      "period": 200,
+      "condition": "above"
+    }
+  },
+
+  "config": {
+    "timeframes": ["15m", "1h"],
+    "instruments": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "SBIN"],
+    "minConfidence": 0.7
+  }
+}
+
+AVAILABLE INDICATORS:
+- Price: close, open, high, low
+- Moving Averages: sma, ema (params: period)
+- Momentum: rsi (period), macd (fast, slow, signal), macd_signal, macd_histogram
+- Stochastic: stoch_k, stoch_d (period, d, smooth)
+- Volatility: bb_upper, bb_middle, bb_lower (period, stdDev), atr (period)
+- Trend: adx (period)
+- Volume: volume, volume_avg (period)
+
+AVAILABLE OPERATORS:
+- above: Greater than
+- below: Less than
+- crosses_above: Crosses from below to above (for signals)
+- crosses_below: Crosses from above to below
+
+STOP-LOSS TYPES:
+- atr: ATR multiplier (value = 2 means 2x ATR)
+- percent: Percentage (value = 2 means 2%)
+- swing: Recent swing high/low
+- structure: Nearest support/resistance
+
+TARGET TYPES:
+- rr: Risk-reward ratio (value = 2 means 2:1)
+- atr: ATR multiplier
+- structure: Nearest resistance/support
+
+RULES:
+1. All conditions in "long" array must be TRUE to trigger buy
+2. Use "crosses_above" for entry signals (not just "above")
+3. Always include at least one entry condition
+4. Stop-loss should be 1.5-3x ATR typically
+5. Target should be at least 1.5x risk (rr: 1.5 or higher)
+6. Add trend filter (EMA 200) to improve win rate
+7. Include volume filter if strategy mentions volume
+
+Generate the complete JSON now for my strategy described above.
+
+================================================================================
+END OF PROMPT
+================================================================================
+
+
+AFTER GENERATION:
+1. Save the JSON output to: shared/configs/strategies/your-strategy-name.json
+2. The strategy will automatically be available in the trading platform
+3. Test with: npx ts-node src/cli/commands.ts simulate -f data/nse/reliance_15m.csv -s RELIANCE
+

@@ -1,0 +1,75 @@
+{
+  "name": "EMA Crossover",
+  "description": "Buy when 20 EMA crosses above 50 EMA with trend filter",
+  "version": "1.0.0",
+  "author": "Shades Research",
+  
+  "entry": {
+    "long": [
+      {
+        "indicator": "ema",
+        "params": { "period": 20 },
+        "operator": "crosses_above",
+        "value": "ema",
+        "valueParams": { "period": 50 }
+      },
+      {
+        "indicator": "close",
+        "operator": "above",
+        "value": "ema",
+        "valueParams": { "period": 200 }
+      }
+    ],
+    "short": [
+      {
+        "indicator": "ema",
+        "params": { "period": 20 },
+        "operator": "crosses_below",
+        "value": "ema",
+        "valueParams": { "period": 50 }
+      },
+      {
+        "indicator": "close",
+        "operator": "below",
+        "value": "ema",
+        "valueParams": { "period": 200 }
+      }
+    ]
+  },
+  
+  "exit": {
+    "stopLoss": {
+      "type": "atr",
+      "value": 2
+    },
+    "target": {
+      "type": "rr",
+      "value": 2
+    },
+    "trailingStop": {
+      "type": "step",
+      "activationR": 1,
+      "value": 0.5
+    }
+  },
+  
+  "filters": {
+    "trendFilter": {
+      "indicator": "adx",
+      "period": 14,
+      "condition": "strong",
+      "threshold": 25
+    },
+    "volumeFilter": {
+      "minRatio": 1.2,
+      "period": 20
+    }
+  },
+  
+  "config": {
+    "timeframes": ["1h", "4h", "1d"],
+    "instruments": ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"],
+    "minConfidence": 0.7
+  }
+}
+

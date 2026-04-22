@@ -1,0 +1,226 @@
+{
+  "_documentation": {
+    "description": "This is a template for creating trading strategy JSON files for the Shades Trading Platform. Give this file along with your strategy description to an LLM to generate a valid strategy JSON.",
+    "usage": "Copy this template, remove the '_documentation' section, and fill in your strategy details.",
+    "llm_prompt": "Use this template to create a strategy JSON file. The strategy should be: [YOUR STRATEGY DESCRIPTION HERE]"
+  },
+
+  "_field_reference": {
+    "name": "Strategy name (e.g., 'EMA Crossover', 'RSI Divergence')",
+    "description": "One-line description of what the strategy does",
+    "version": "Semantic version (e.g., '1.0.0')",
+    "author": "Your name or 'Shades Research'",
+    
+    "entry": {
+      "_note": "Define conditions for LONG and/or SHORT entries. All conditions must be true to trigger entry.",
+      "long": "Array of conditions for buy signals",
+      "short": "Array of conditions for sell signals"
+    },
+    
+    "exit": {
+      "stopLoss": "How to calculate stop-loss",
+      "target": "How to calculate take-profit target",
+      "trailingStop": "Optional trailing stop configuration"
+    },
+    
+    "filters": {
+      "_note": "Optional filters to avoid bad trades",
+      "trendFilter": "Only trade in direction of trend",
+      "volumeFilter": "Require minimum volume",
+      "timeFilter": "Restrict trading hours/days"
+    },
+    
+    "config": {
+      "timeframes": "Which timeframes this strategy works on",
+      "instruments": "Which stocks/instruments to trade",
+      "minConfidence": "Minimum confidence score (0.0 to 1.0)"
+    }
+  },
+
+  "_available_indicators": {
+    "price_based": [
+      "price - Current close price",
+      "close - Same as price",
+      "open - Current open price", 
+      "high - Current high price",
+      "low - Current low price"
+    ],
+    "moving_averages": [
+      "sma - Simple Moving Average (params: period)",
+      "ema - Exponential Moving Average (params: period)"
+    ],
+    "momentum": [
+      "rsi - Relative Strength Index (params: period, default 14)",
+      "macd - MACD line (params: fast, slow, signal)",
+      "macd_signal - MACD signal line",
+      "macd_histogram - MACD histogram",
+      "stoch_k - Stochastic %K (params: period, d, smooth)",
+      "stoch_d - Stochastic %D"
+    ],
+    "volatility": [
+      "bb_upper - Bollinger Band Upper (params: period, stdDev)",
+      "bb_middle - Bollinger Band Middle (SMA)",
+      "bb_lower - Bollinger Band Lower",
+      "atr - Average True Range (params: period)"
+    ],
+    "trend": [
+      "adx - Average Directional Index (params: period)"
+    ],
+    "volume": [
+      "volume - Current volume",
+      "volume_avg - Average volume (params: period)"
+    ],
+    "structure": [
+      "support - Nearest support level",
+      "resistance - Nearest resistance level"
+    ]
+  },
+
+  "_available_operators": {
+    "comparison": [
+      "above - Value is greater than",
+      "below - Value is less than",
+      "equals - Value equals (with small tolerance)"
+    ],
+    "crossover": [
+      "crosses_above - Value crosses above another (bullish signal)",
+      "crosses_below - Value crosses below another (bearish signal)"
+    ],
+    "range": [
+      "between - Value is between two numbers"
+    ]
+  },
+
+  "_stop_loss_types": {
+    "atr": "Stop at X times ATR from entry (value = ATR multiplier, e.g., 2.0)",
+    "percent": "Stop at X% from entry (value = percentage, e.g., 2.0 for 2%)",
+    "fixed": "Stop at fixed price distance (value = price distance)",
+    "swing": "Stop below/above recent swing low/high",
+    "structure": "Stop below/above nearest support/resistance"
+  },
+
+  "_target_types": {
+    "rr": "Target at X times risk (value = risk:reward ratio, e.g., 2.0 for 1:2)",
+    "atr": "Target at X times ATR from entry",
+    "percent": "Target at X% from entry",
+    "fixed": "Target at fixed price distance",
+    "structure": "Target at nearest support/resistance level"
+  },
+
+  "_example_conditions": {
+    "ema_crossover": {
+      "indicator": "ema",
+      "params": { "period": 20 },
+      "operator": "crosses_above",
+      "value": "ema",
+      "valueParams": { "period": 50 }
+    },
+    "rsi_oversold": {
+      "indicator": "rsi",
+      "params": { "period": 14 },
+      "operator": "crosses_above",
+      "value": 30
+    },
+    "price_above_ma": {
+      "indicator": "close",
+      "operator": "above",
+      "value": "ema",
+      "valueParams": { "period": 200 }
+    },
+    "macd_bullish": {
+      "indicator": "macd",
+      "params": { "fast": 12, "slow": 26, "signal": 9 },
+      "operator": "crosses_above",
+      "value": "macd_signal"
+    },
+    "volume_spike": {
+      "indicator": "volume",
+      "operator": "above",
+      "value": "volume_avg",
+      "valueParams": { "period": 20 }
+    },
+    "bollinger_breakout": {
+      "indicator": "close",
+      "operator": "crosses_above",
+      "value": "bb_upper",
+      "valueParams": { "period": 20, "stdDev": 2 }
+    }
+  },
+
+  "_valid_timeframes": ["1m", "5m", "15m", "1h", "4h", "1d", "1w"],
+
+  "_nse_stocks": [
+    "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+    "HINDUNILVR", "SBIN", "BHARTIARTL", "KOTAKBANK", "ITC",
+    "LT", "AXISBANK", "MARUTI", "TITAN", "BAJFINANCE",
+    "TATAMOTORS", "WIPRO", "SUNPHARMA", "NESTLEIND", "TECHM"
+  ],
+
+  "___TEMPLATE_STARTS_HERE___": "Delete everything above this line after understanding",
+
+  "name": "Your Strategy Name",
+  "description": "Brief description of what the strategy does",
+  "version": "1.0.0",
+  "author": "Your Name",
+
+  "entry": {
+    "long": [
+      {
+        "indicator": "INDICATOR_NAME",
+        "params": { "period": 14 },
+        "operator": "OPERATOR",
+        "value": "COMPARE_TO",
+        "valueParams": { "period": 14 }
+      }
+    ],
+    "short": [
+      {
+        "indicator": "INDICATOR_NAME",
+        "params": { "period": 14 },
+        "operator": "OPERATOR",
+        "value": "COMPARE_TO",
+        "valueParams": { "period": 14 }
+      }
+    ]
+  },
+
+  "exit": {
+    "stopLoss": {
+      "type": "atr",
+      "value": 2.0
+    },
+    "target": {
+      "type": "rr",
+      "value": 2.0
+    },
+    "trailingStop": {
+      "type": "step",
+      "activationR": 1.0,
+      "value": 0.5
+    }
+  },
+
+  "filters": {
+    "trendFilter": {
+      "indicator": "ema",
+      "period": 200,
+      "condition": "above",
+      "threshold": null
+    },
+    "volumeFilter": {
+      "minRatio": 1.0,
+      "period": 20
+    },
+    "timeFilter": {
+      "allowedHours": { "start": 9, "end": 15 },
+      "allowedDays": [1, 2, 3, 4, 5]
+    }
+  },
+
+  "config": {
+    "timeframes": ["15m", "1h"],
+    "instruments": ["RELIANCE", "TCS", "INFY"],
+    "minConfidence": 0.7
+  }
+}
+

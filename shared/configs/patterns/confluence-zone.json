@@ -1,0 +1,15 @@
+{
+  "id": "confluence-zone-em2",
+  "name": "Confluence Zone + Entry Model 2",
+  "version": "1.0.0",
+  "enabled": true,
+  "timeframes": ["15m", "1h", "4h"],
+  "parameters": {
+    "minConfluenceFactors": 2,
+    "srZoneLookback": 100,
+    "fibLevels": [0.5, 0.618, 0.786],
+    "zoneToleranceATR": 0.5,
+    "minRejectionWickRatio": 2.0
+  }
+}
+

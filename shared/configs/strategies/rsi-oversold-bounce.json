@@ -1,0 +1,62 @@
+{
+  "name": "RSI Oversold Bounce",
+  "description": "Buy when RSI crosses above 30 (oversold) with trend confirmation",
+  "version": "1.0.0",
+  "author": "Shades Research",
+  
+  "entry": {
+    "long": [
+      {
+        "indicator": "rsi",
+        "params": { "period": 14 },
+        "operator": "crosses_above",
+        "value": 30
+      },
+      {
+        "indicator": "close",
+        "operator": "above",
+        "value": "ema",
+        "valueParams": { "period": 200 }
+      }
+    ],
+    "short": [
+      {
+        "indicator": "rsi",
+        "params": { "period": 14 },
+        "operator": "crosses_below",
+        "value": 70
+      },
+      {
+        "indicator": "close",
+        "operator": "below",
+        "value": "ema",
+        "valueParams": { "period": 200 }
+      }
+    ]
+  },
+  
+  "exit": {
+    "stopLoss": {
+      "type": "swing",
+      "value": 1
+    },
+    "target": {
+      "type": "structure",
+      "value": 1
+    }
+  },
+  
+  "filters": {
+    "volumeFilter": {
+      "minRatio": 1.0,
+      "period": 20
+    }
+  },
+  
+  "config": {
+    "timeframes": ["1h", "4h"],
+    "instruments": ["SBIN", "AXISBANK", "KOTAKBANK", "LT", "MARUTI"],
+    "minConfidence": 0.65
+  }
+}
+

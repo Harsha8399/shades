@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Data & DB (user-specific)
+app-ts/data/*.db
+research-py/data/nse/
+research-py/results/
+
+# Environment
+.env
+.env.*
+!.env.example
+app-ts/config/.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.sw?
+
+# OS
+Thumbs.db

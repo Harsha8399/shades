@@ -1,0 +1,30 @@
+[project]
+name = "shades-research"
+version = "0.1.0"
+description = "Trading Pattern Research Platform - Python Research Lab"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.1.0",
+    "numpy>=1.24.0",
+    "matplotlib>=3.8.0",
+    "python-dateutil>=2.8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ipykernel>=6.28.0",
+    "jupyter>=1.0.0",
+    "pytest>=7.4.0",
+]
+ml = [
+    "scikit-learn>=1.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
