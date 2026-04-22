@@ -4,4 +4,5 @@ export { EquityChart } from './EquityChart';
 export { TradeTable } from './TradeTable';
 export { PatternPerformance } from './PatternPerformance';
 export { NotificationBanner } from './NotificationBanner';
+export { SymbolLookup } from './SymbolLookup';
 

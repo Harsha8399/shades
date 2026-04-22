@@ -114,5 +114,28 @@ export const api = {
     getStatusById: (id: string) =>
       fetchApi<any>(`/simulation/status/${id}`),
   },
+
+  // Instruments / Symbol lookup
+  instruments: {
+    search: (query: string) =>
+      fetchApi<{ symbols: any[]; total: number }>(`/instruments/search?q=${encodeURIComponent(query)}`),
+
+    getDetails: (symbol: string, spotPrice?: number) =>
+      fetchApi<any>(`/instruments/${encodeURIComponent(symbol)}/details${spotPrice ? `?spotPrice=${spotPrice}` : ''}`),
+
+    getOptions: (symbol: string, spotPrice?: number, strikes?: number, volatility?: number) => {
+      const params = new URLSearchParams();
+      if (spotPrice) params.set('spotPrice', String(spotPrice));
+      if (strikes) params.set('strikes', String(strikes));
+      if (volatility) params.set('volatility', String(volatility));
+      return fetchApi<any>(`/instruments/${encodeURIComponent(symbol)}/options?${params}`);
+    },
+
+    getQuote: (symbol: string) =>
+      fetchApi<any>(`/instruments/${encodeURIComponent(symbol)}/quote`),
+
+    getAll: () =>
+      fetchApi<{ symbols: any[]; total: number }>('/instruments'),
+  },
 };
 

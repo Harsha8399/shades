@@ -16,6 +16,7 @@ import notificationsRouter from './routes/notifications';
 import configRouter from './routes/config';
 import { createLLMRouter } from './routes/llm';
 import { createSimulationRouter } from './routes/simulation';
+import { createInstrumentsRouter } from './routes/instruments';
 import { DEFAULT_CONFIG } from '../config/default';
 
 export interface ApiServerConfig {
@@ -82,6 +83,7 @@ export class ApiServer {
     this.app.use('/api/config', configRouter);
     this.app.use('/api/llm', createLLMRouter(this.repository));
     this.app.use('/api/simulation', createSimulationRouter(this.repository));
+    this.app.use('/api/instruments', createInstrumentsRouter(this.repository));
   }
 
   private setupErrorHandling(): void {

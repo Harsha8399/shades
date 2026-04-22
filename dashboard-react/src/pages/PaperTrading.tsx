@@ -18,8 +18,10 @@ import {
   Filter,
   ArrowUpRight,
   ArrowDownRight,
+  Search,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { SymbolLookup } from '../components/SymbolLookup';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -58,9 +60,11 @@ interface OpenTrade {
 // ─── Main Page ───────────────────────────────────────────
 
 export function PaperTrading() {
-  const [tab, setTab] = useState<'simulate' | 'manual' | 'open'>('open');
+  const [tab, setTab] = useState<'simulate' | 'manual' | 'open' | 'lookup'>('open');
   const [openTrades, setOpenTrades] = useState<OpenTrade[]>([]);
   const [isLoadingTrades, setIsLoadingTrades] = useState(true);
+  const [prefillSymbol, setPrefillSymbol] = useState<string>('');
+  const [prefillPrice, setPrefillPrice] = useState<number>(0);
 
   const refreshOpenTrades = useCallback(async () => {
     try {
@@ -93,6 +97,7 @@ export function PaperTrading() {
       <div className="flex gap-2 border-b border-slate-700/50 pb-0">
         {([
           { key: 'open', label: 'Open Trades', icon: Target, count: openTrades.length },
+          { key: 'lookup', label: 'Symbol Lookup', icon: Search },
           { key: 'manual', label: 'New Trade', icon: Plus },
           { key: 'simulate', label: 'Run Simulation', icon: Play },
         ] as const).map(({ key, label, icon: Icon, count }) => (
@@ -117,7 +122,15 @@ export function PaperTrading() {
 
       {/* Tab Content */}
       {tab === 'open' && <OpenTradesPanel trades={openTrades} isLoading={isLoadingTrades} onRefresh={refreshOpenTrades} />}
-      {tab === 'manual' && <ManualTradeForm onCreated={() => { setTab('open'); refreshOpenTrades(); }} />}
+      {tab === 'lookup' && (
+        <SymbolLookup
+          onSymbolSelect={(symbol, price) => {
+            setPrefillSymbol(symbol);
+            setPrefillPrice(price);
+          }}
+        />
+      )}
+      {tab === 'manual' && <ManualTradeForm prefillSymbol={prefillSymbol} prefillPrice={prefillPrice} onCreated={() => { setTab('open'); refreshOpenTrades(); }} />}
       {tab === 'simulate' && <SimulationPanel onComplete={refreshOpenTrades} />}
     </div>
   );
@@ -267,11 +280,11 @@ function OpenTradesPanel({ trades, isLoading, onRefresh }: { trades: OpenTrade[]
 
 // ─── Manual Trade Form ───────────────────────────────────
 
-function ManualTradeForm({ onCreated }: { onCreated: () => void }) {
+function ManualTradeForm({ onCreated, prefillSymbol, prefillPrice }: { onCreated: () => void; prefillSymbol?: string; prefillPrice?: number }) {
   const [form, setForm] = useState({
-    symbol: '',
+    symbol: prefillSymbol || '',
     direction: 'LONG' as 'LONG' | 'SHORT',
-    entryPrice: '',
+    entryPrice: prefillPrice ? String(prefillPrice) : '',
     stopLoss: '',
     target: '',
     quantity: '',
@@ -279,6 +292,15 @@ function ManualTradeForm({ onCreated }: { onCreated: () => void }) {
     patternName: 'Manual Trade',
     notes: '',
   });
+
+  // Update form when prefill changes
+  useEffect(() => {
+    if (prefillSymbol) setForm(prev => ({ ...prev, symbol: prefillSymbol }));
+  }, [prefillSymbol]);
+  useEffect(() => {
+    if (prefillPrice) setForm(prev => ({ ...prev, entryPrice: String(prefillPrice) }));
+  }, [prefillPrice]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
