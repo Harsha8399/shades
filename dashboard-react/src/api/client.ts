@@ -75,5 +75,44 @@ export const api = {
     clearHistory: () =>
       fetchApi<{ message: string }>('/llm/history', { method: 'DELETE' }),
   },
+
+  // Paper Trading - Manual Trade CRUD
+  createTrade: (body: {
+    symbol: string;
+    direction: string;
+    entryPrice: number;
+    stopLoss: number;
+    target: number;
+    quantity: number;
+    timeframe: string;
+    patternName?: string;
+    notes?: string;
+  }) => postApi<{ trade: any }>('/trades', body),
+
+  closeTrade: (id: string, exitPrice: number) =>
+    putApi<{ trade: any }>(`/trades/${id}/close`, { exitPrice }),
+
+  deleteTrade: (id: string) =>
+    fetchApi<{ message: string }>(`/trades/${id}`, { method: 'DELETE' }),
+
+  // Simulation
+  simulation: {
+    getDataFiles: () =>
+      fetchApi<{ files: { name: string; path: string; size: number; modified: string }[] }>('/simulation/data-files'),
+
+    run: (body: {
+      filePath: string;
+      symbol: string;
+      timeframe: string;
+      filters?: boolean;
+      looseFilters?: boolean;
+    }) => postApi<any>('/simulation/run', body),
+
+    getStatus: () =>
+      fetchApi<{ runs: any[] }>('/simulation/status'),
+
+    getStatusById: (id: string) =>
+      fetchApi<any>(`/simulation/status/${id}`),
+  },
 };
 

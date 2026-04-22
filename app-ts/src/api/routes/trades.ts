@@ -2,8 +2,9 @@
  * Trades API Routes
  */
 import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { TradeRepository } from '../../db/TradeRepository';
-import { TradeState } from '../../types';
+import { Trade, TradeState } from '../../types';
 
 export function createTradesRouter(repository: TradeRepository): Router {
   const router = Router();
@@ -52,6 +53,182 @@ export function createTradesRouter(repository: TradeRepository): Router {
     } catch (error) {
       console.error('Error fetching trades:', error);
       res.status(500).json({ error: 'Failed to fetch trades' });
+    }
+  });
+
+  /**
+   * POST /api/trades
+   * Create a manual paper trade
+   * 
+   * Body: { symbol, direction, entryPrice, stopLoss, target, quantity, timeframe?, patternName?, notes? }
+   */
+  router.post('/', (req: Request, res: Response) => {
+    try {
+      const {
+        symbol,
+        direction,
+        entryPrice,
+        stopLoss,
+        target,
+        quantity,
+        timeframe = '15m',
+        patternName = 'Manual Trade',
+        notes = '',
+      } = req.body;
+
+      // Validate required fields
+      if (!symbol || !direction || !entryPrice || !stopLoss || !target || !quantity) {
+        return res.status(400).json({
+          error: 'Required fields: symbol, direction, entryPrice, stopLoss, target, quantity',
+        });
+      }
+
+      if (!['LONG', 'SHORT'].includes(direction)) {
+        return res.status(400).json({ error: 'direction must be LONG or SHORT' });
+      }
+
+      if (entryPrice <= 0 || stopLoss <= 0 || target <= 0 || quantity <= 0) {
+        return res.status(400).json({ error: 'Price values and quantity must be positive' });
+      }
+
+      // Calculate risk
+      const riskPerShare = Math.abs(entryPrice - stopLoss);
+      const riskAmount = riskPerShare * quantity;
+      const riskPercent = (riskPerShare / entryPrice) * 100;
+
+      const now = new Date();
+      const trade: Trade = {
+        id: uuidv4(),
+        patternId: `manual_${Date.now()}`,
+        patternName,
+        symbol: symbol.toUpperCase(),
+        timeframe: timeframe as Trade['timeframe'],
+        direction: direction as Trade['direction'],
+        executionType: 'SPOT',
+        state: 'OPEN',
+        stateHistory: [
+          { from: null, to: 'PENDING', timestamp: now, reason: 'Manual trade created', price: entryPrice },
+          { from: 'PENDING', to: 'OPEN', timestamp: now, reason: 'Manual entry', price: entryPrice },
+        ],
+        signalPrice: entryPrice,
+        entryPrice,
+        initialStopLoss: stopLoss,
+        currentStopLoss: stopLoss,
+        target,
+        exitPrice: null,
+        quantity,
+        remainingQuantity: quantity,
+        riskAmount,
+        riskPercent,
+        partialExits: [],
+        realizedPnl: 0,
+        unrealizedPnl: 0,
+        signalTime: now,
+        entryTime: now,
+        exitTime: null,
+        expiryTime: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        pnl: null,
+        pnlPercent: null,
+        rMultiple: null,
+        averageExitPrice: null,
+        confluenceFactors: ['Manual Entry'],
+        notes: notes ? [notes] : [],
+        tags: ['manual'],
+      };
+
+      repository.save(trade);
+      console.log(`[Trades] Manual trade created: ${direction} ${symbol} @ ${entryPrice}`);
+
+      res.status(201).json(trade);
+    } catch (error) {
+      console.error('Error creating trade:', error);
+      res.status(500).json({ error: 'Failed to create trade' });
+    }
+  });
+
+  /**
+   * PUT /api/trades/:id/close
+   * Close or stop-out a trade manually
+   * 
+   * Body: { exitPrice, reason? }
+   */
+  router.put('/:id/close', (req: Request, res: Response) => {
+    try {
+      const trade = repository.getById(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: 'Trade not found' });
+      }
+
+      if (trade.state !== 'OPEN' && trade.state !== 'PENDING') {
+        return res.status(400).json({ error: `Cannot close trade in state: ${trade.state}` });
+      }
+
+      const { exitPrice, reason = 'Manual close' } = req.body;
+      if (!exitPrice || exitPrice <= 0) {
+        return res.status(400).json({ error: 'exitPrice is required and must be positive' });
+      }
+
+      const now = new Date();
+
+      // Determine if profit or loss
+      let pnl: number;
+      if (trade.direction === 'LONG') {
+        pnl = (exitPrice - (trade.entryPrice || trade.signalPrice)) * trade.quantity;
+      } else {
+        pnl = ((trade.entryPrice || trade.signalPrice) - exitPrice) * trade.quantity;
+      }
+
+      const entryP = trade.entryPrice || trade.signalPrice;
+      const pnlPercent = (pnl / (entryP * trade.quantity)) * 100;
+      const riskPerShare = Math.abs(entryP - trade.initialStopLoss);
+      const rMultiple = riskPerShare > 0 ? pnl / (riskPerShare * trade.quantity) : 0;
+
+      // Determine new state based on P&L
+      const newState: TradeState = pnl >= 0 ? 'CLOSED' : 'STOPPED';
+
+      trade.state = newState;
+      trade.exitPrice = exitPrice;
+      trade.exitTime = now;
+      trade.pnl = pnl;
+      trade.pnlPercent = pnlPercent;
+      trade.rMultiple = rMultiple;
+      trade.averageExitPrice = exitPrice;
+      trade.stateHistory.push({
+        from: 'OPEN',
+        to: newState,
+        timestamp: now,
+        reason,
+        price: exitPrice,
+      });
+
+      repository.save(trade);
+      console.log(`[Trades] Trade ${trade.id.slice(0, 8)} closed @ ${exitPrice} — P&L: ₹${pnl.toFixed(2)}`);
+
+      res.json(trade);
+    } catch (error) {
+      console.error('Error closing trade:', error);
+      res.status(500).json({ error: 'Failed to close trade' });
+    }
+  });
+
+  /**
+   * DELETE /api/trades/:id
+   * Delete a trade
+   */
+  router.delete('/:id', (req: Request, res: Response) => {
+    try {
+      const trade = repository.getById(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: 'Trade not found' });
+      }
+
+      repository.delete(req.params.id);
+      console.log(`[Trades] Trade ${req.params.id.slice(0, 8)} deleted`);
+
+      res.json({ message: 'Trade deleted' });
+    } catch (error) {
+      console.error('Error deleting trade:', error);
+      res.status(500).json({ error: 'Failed to delete trade' });
     }
   });
 

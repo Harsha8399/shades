@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, LineChart, Layers, Activity, Brain } from 'lucide-react';
+import { LayoutDashboard, LineChart, Layers, Activity, Brain, Play } from 'lucide-react';
 import clsx from 'clsx';
 import { NotificationBanner } from './NotificationBanner';
 
@@ -12,6 +12,7 @@ const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Overview' },
   { path: '/trades', icon: Activity, label: 'Trades' },
   { path: '/patterns', icon: Layers, label: 'Patterns' },
+  { path: '/paper-trading', icon: Play, label: 'Paper Trading' },
   { path: '/analysis', icon: Brain, label: 'AI Analysis' },
 ];
 
