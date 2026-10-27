@@ -34,6 +34,7 @@ const PROVIDERS = [
   { value: 'ollama', label: 'Ollama (Local)', description: 'Free, runs on your machine' },
   { value: 'deepseek', label: 'DeepSeek', description: 'Cloud API, fast and cheap' },
   { value: 'openai', label: 'OpenAI', description: 'GPT-4o-mini, high quality' },
+  { value: 'openrouter', label: 'OpenRouter', description: 'Access to 100+ models including Nemotron 3 Ultra (free)' },
 ] as const;
 
 interface AnalysisResult {

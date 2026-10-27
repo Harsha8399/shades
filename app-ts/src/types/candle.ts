@@ -13,7 +13,7 @@ export interface Candle {
 /**
  * Supported timeframes
  */
-export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w';
+export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w';
 
 /**
  * Trade direction
@@ -53,17 +53,17 @@ export function getLowerWick(candle: Candle): number {
 }
 
 /**
- * Check if candle is bullish
+ * Check if candle is bullish (close >= open, doji counts as bullish)
  */
 export function isBullish(candle: Candle): boolean {
-  return candle.close > candle.open;
+  return candle.close >= candle.open;
 }
 
 /**
- * Check if candle is bearish
+ * Check if candle is bearish (close <= open, doji counts as bearish)
  */
 export function isBearish(candle: Candle): boolean {
-  return candle.close < candle.open;
+  return candle.close <= candle.open;
 }
 
 /**

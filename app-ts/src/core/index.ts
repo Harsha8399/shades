@@ -13,6 +13,9 @@ export { PaperTradingEngine, TrailingStopConfig } from './PaperTradingEngine';
 export { TradeStateMachine } from './TradeStateMachine';
 export { RiskManager } from './RiskManager';
 export { ExecutionSimulator, defaultExecutionSimulator } from './ExecutionSimulator';
+export { ReplayEngine } from './ReplayEngine';
+export type { ReplayStepCallback, ReplayCompleteCallback, ReplayErrorCallback, FilteredSignal } from './ReplayEngine';
+export type { DecisionTrace } from '../types/decision';
 
 // Live monitoring
 export { LiveMonitor } from './LiveMonitor';

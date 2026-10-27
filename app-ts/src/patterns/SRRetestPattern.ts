@@ -159,6 +159,15 @@ export class SRRetestPattern extends BasePattern {
   
   /**
    * Check if price is retesting a zone after breaking it
+   * 
+   * The required temporal sequence for a flip/retest is:
+   *   1. Price was on the FAR side of the zone (wasOnOtherSide)
+   *   2. Price then broke THROUGH the zone (brokeThrough)
+   *   3. Price is now back at the zone (atZone) — the retest
+   *
+   * The previous implementation set both flags in a single forward scan
+   * without caring about their order, which allowed false positives where
+   * price returned to the zone from the same side it had always been on.
    */
   private checkRetest(
     candles: Candle[],
@@ -167,52 +176,82 @@ export class SRRetestPattern extends BasePattern {
   ): { isRetest: boolean; flipped: boolean } {
     const currentCandle = candles[candles.length - 1];
     const currentPrice = currentCandle.close;
-    
+
     // Check if current price is at the zone
     const atZone = Math.abs(currentPrice - zone.priceLevel) <= tolerance;
-    
+
     if (!atZone) {
       return { isRetest: false, flipped: false };
     }
-    
-    // Look for prior break
-    let brokeThrough = false;
-    let wasOnOtherSide = false;
-    
-    // Check recent history for break and retest pattern
+
+    // Look back through recent history for the required sequence.
     const lookback = Math.min(20, candles.length - 1);
-    
-    for (let i = candles.length - lookback; i < candles.length - 1; i++) {
-      const candle = candles[i];
-      
-      if (zone.type === 'SUPPORT') {
-        // Check if price broke below support
-        if (candle.close < zone.priceLevel - tolerance) {
-          brokeThrough = true;
-        }
-        // Check if price was above before
-        if (candle.close > zone.priceLevel + tolerance) {
-          wasOnOtherSide = true;
-        }
-      } else {
-        // Check if price broke above resistance
-        if (candle.close > zone.priceLevel + tolerance) {
-          brokeThrough = true;
-        }
-        // Check if price was below before
-        if (candle.close < zone.priceLevel - tolerance) {
-          wasOnOtherSide = true;
+    const historyStart = candles.length - lookback;
+
+    // Phase 1: find the earliest bar where price was on the FAR side.
+    // Phase 2: find a break AFTER that bar.
+    // If both phases succeed, the current atZone constitutes a retest.
+
+    if (zone.type === 'SUPPORT') {
+      // Flip scenario: support was tested from ABOVE, price broke BELOW,
+      // now retesting from below as new resistance.
+      let farSideEndIndex = -1;
+      for (let i = historyStart; i < candles.length - 1; i++) {
+        if (candles[i].close > zone.priceLevel + tolerance) {
+          farSideEndIndex = i;
+          break; // take the earliest occurrence
         }
       }
+
+      if (farSideEndIndex === -1) {
+        // Price was never clearly above support in the lookback window
+        const flipped = false;
+        return { isRetest: atZone && !this.config.parameters.requireFlip, flipped };
+      }
+
+      // Look for a break BELOW support after farSideEndIndex
+      let brokeThrough = false;
+      for (let i = farSideEndIndex + 1; i < candles.length - 1; i++) {
+        if (candles[i].close < zone.priceLevel - tolerance) {
+          brokeThrough = true;
+          break;
+        }
+      }
+
+      const flipped = brokeThrough;
+      const isRetest = atZone && (flipped || !this.config.parameters.requireFlip);
+      return { isRetest, flipped };
+
+    } else {
+      // zone.type === 'RESISTANCE'
+      // Flip scenario: resistance was tested from BELOW, price broke ABOVE,
+      // now retesting from above as new support.
+      let farSideEndIndex = -1;
+      for (let i = historyStart; i < candles.length - 1; i++) {
+        if (candles[i].close < zone.priceLevel - tolerance) {
+          farSideEndIndex = i;
+          break;
+        }
+      }
+
+      if (farSideEndIndex === -1) {
+        const flipped = false;
+        return { isRetest: atZone && !this.config.parameters.requireFlip, flipped };
+      }
+
+      // Look for a break ABOVE resistance after farSideEndIndex
+      let brokeThrough = false;
+      for (let i = farSideEndIndex + 1; i < candles.length - 1; i++) {
+        if (candles[i].close > zone.priceLevel + tolerance) {
+          brokeThrough = true;
+          break;
+        }
+      }
+
+      const flipped = brokeThrough;
+      const isRetest = atZone && (flipped || !this.config.parameters.requireFlip);
+      return { isRetest, flipped };
     }
-    
-    // For flip pattern: need to have been on one side, broken through, now retesting
-    const flipped = wasOnOtherSide && brokeThrough;
-    
-    // Simple retest: price is at zone
-    const isRetest = atZone && (flipped || !this.config.parameters.requireFlip);
-    
-    return { isRetest, flipped };
   }
   
   /**

@@ -79,3 +79,19 @@ export interface DailyStats {
   trades: number;
 }
 
+export interface ScanResult {
+  symbol: string;
+  timeframe: string;
+  signal: {
+    direction: 'LONG' | 'SHORT';
+    entryPrice: number;
+    stopLoss: number;
+    target: number;
+    confidence: number;
+    confluenceFactors: string[];
+    riskRewardRatio: number;
+  } | null;
+  confluenceFactors: string[];
+  timestamp: string;
+}
+

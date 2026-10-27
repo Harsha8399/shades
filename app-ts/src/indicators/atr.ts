@@ -18,6 +18,17 @@ export function calculateTrueRange(current: Candle, previous: Candle | null): nu
 
 /**
  * Calculate Average True Range (ATR)
+ *
+ * Wilder's smoothing, reproducing the `technicalindicators` library's ATR
+ * exactly. The library's convention is:
+ *   * True Range[0] is high-low (there is no previous close on the first
+ *     bar) and is NOT used for seeding.
+ *   * The ATR is seeded with the simple mean of True Range[1 .. period].
+ *   * Each subsequent bar applies ((atr * (period - 1)) + tr) / period.
+ *
+ * The Python research engine implements the same algorithm, so the two
+ * engines derive identical ATR-derived tolerances.
+ *
  * @param candles - Array of OHLCV candles
  * @param period - ATR period (default: 14)
  * @returns ATR value
@@ -29,17 +40,20 @@ export function calculateATR(candles: Candle[], period: number = 14): number {
     return ranges.reduce((a, b) => a + b, 0) / ranges.length;
   }
   
-  // Calculate true ranges
+  // True ranges. The first bar has no previous close, so its true range is
+  // just high - low.
   const trueRanges: number[] = [];
-  for (let i = 1; i < candles.length; i++) {
-    trueRanges.push(calculateTrueRange(candles[i], candles[i - 1]));
+  for (let i = 0; i < candles.length; i++) {
+    const current = candles[i];
+    const previous = i > 0 ? candles[i - 1] : null;
+    trueRanges.push(calculateTrueRange(current, previous));
   }
   
-  // Calculate initial ATR (SMA of first 'period' true ranges)
-  let atr = trueRanges.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  // Seed with the simple mean of TR[1..period]. TR[0] has no previous close
+  // and is excluded, matching the library.
+  let atr = trueRanges.slice(1, period + 1).reduce((a, b) => a + b, 0) / period;
   
-  // Apply Wilder's smoothing for remaining values
-  for (let i = period; i < trueRanges.length; i++) {
+  for (let i = period + 1; i < trueRanges.length; i++) {
     atr = ((atr * (period - 1)) + trueRanges[i]) / period;
   }
   

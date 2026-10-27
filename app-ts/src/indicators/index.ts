@@ -61,6 +61,7 @@ export {
   getTrendlinePrice,
   isPriceAtTrendline,
   projectTrendline,
+  TRENDLINE_MIN_TOUCHES,
 } from './trendlines';
 
 // Fibonacci

@@ -87,14 +87,24 @@ export class RiskManager {
   
   /**
    * Calculate position size based on risk
+   *
+   * @param entryPrice - The price the order will actually fill at
+   * @param stopLoss - The stop-loss price
+   * @param riskPercent - Risk fraction to use (defaults to maxRiskPerTrade)
+   * @param equity - Account equity AT THE MOMENT OF FILL. Defaults to the
+   *   realised capital. The Python engine sizes on equity that includes the
+   *   unrealised P&L of open positions, so the two engines would disagree on
+   *   position size if this were left as realised capital only.
    */
   calculatePositionSize(
     entryPrice: number,
     stopLoss: number,
-    riskPercent?: number
+    riskPercent?: number,
+    equity?: number
   ): { quantity: number; riskAmount: number; riskPercent: number } {
     const actualRiskPercent = riskPercent || this.maxRiskPerTrade;
-    const riskAmount = this.capital * actualRiskPercent;
+    const baseEquity = equity ?? this.capital;
+    const riskAmount = baseEquity * actualRiskPercent;
     
     const riskPerUnit = Math.abs(entryPrice - stopLoss);
     
@@ -124,6 +134,39 @@ export class RiskManager {
    */
   getCapital(): number {
     return this.capital;
+  }
+
+  /**
+   * Get account equity including the unrealised P&L of open positions.
+   *
+   * This is the equity basis the Python engine uses when sizing a position
+   * (`_calculate_equity` in the backtest engine). Sizing on realised capital
+   * alone would make the two engines disagree on position size whenever a
+   * position is already open.
+   *
+   * @param markPrice - Optional mark price applied to every open position.
+   *   When omitted, each position contributes its last recorded unrealised
+   *   P&L.
+   */
+  getEquity(markPrice?: number): number {
+    let equity = this.capital;
+
+    for (const trade of this.repository.getOpenTrades()) {
+      if (trade.entryPrice === null || trade.entryPrice === undefined) {
+        continue;
+      }
+
+      if (markPrice !== undefined) {
+        const unrealized = trade.direction === 'LONG'
+          ? (markPrice - trade.entryPrice) * trade.quantity
+          : (trade.entryPrice - markPrice) * trade.quantity;
+        equity += unrealized;
+      } else if (trade.unrealizedPnl !== null && trade.unrealizedPnl !== undefined) {
+        equity += trade.unrealizedPnl;
+      }
+    }
+
+    return equity;
   }
   
   /**

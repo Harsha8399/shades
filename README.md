@@ -22,8 +22,21 @@ npm run dev
 ```bash
 cd research-py
 pip install -r requirements.txt
-python -m src.backtesting.engine
+python -m src.backtesting.engine data/sample_btc_1h.csv
 ```
+
+### Tests
+
+```bash
+cd research-py
+pip install -e ".[dev]"   # or: pip install pytest
+python -m pytest            # runs the full suite
+python -m pytest -v         # verbose
+```
+
+The backtest execution semantics (signal timing, order fills, ambiguous
+candle handling, cost model) are specified in
+[`research-py/docs/EXECUTION_SEMANTICS.md`](research-py/docs/EXECUTION_SEMANTICS.md).
 
 ## Architecture
 

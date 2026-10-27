@@ -4,12 +4,14 @@
  * Singleton that holds runtime configuration for filters and risk rules.
  * Persists to JSON file and merges with defaults on load.
  */
+import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FilterConfig, DEFAULT_FILTER_CONFIG } from '../core/TradeFilters';
 import { DEFAULT_CONFIG, RiskRules } from './default';
 import { BrokerId, getBrokerProfile } from './brokers';
 import { PresetMode, getPreset, applyPreset } from './presets';
+import { LLMProvider, LLMProviderConfig } from '../llm/types';
 
 /**
  * Account configuration
@@ -39,6 +41,28 @@ export interface IndicatorConfig {
 }
 
 /**
+ * LLM configuration
+ */
+export interface LLMConfig {
+  provider: LLMProvider;
+  openrouterApiKey?: string;
+  deepseekApiKey?: string;
+  openaiApiKey?: string;
+  ollamaBaseUrl?: string;
+  ollamaModel?: string;
+}
+
+/**
+ * Upstox configuration
+ */
+export interface UpstoxConfig {
+  apiKey?: string;
+  apiSecret?: string;
+  redirectUri?: string;
+  accessToken?: string;
+}
+
+/**
  * Runtime configuration structure
  */
 export interface RuntimeConfig {
@@ -51,6 +75,8 @@ export interface RuntimeConfig {
   risk: RiskRules;
   trade: TradeConfig;
   indicators: IndicatorConfig;
+  llm: LLMConfig;
+  upstox: UpstoxConfig;
   
   // Metadata
   updatedAt: string;
@@ -84,6 +110,62 @@ const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
 };
 
 /**
+ * Default LLM config
+ */
+const DEFAULT_LLM_CONFIG: LLMConfig = {
+  provider: 'ollama',
+  ollamaBaseUrl: 'http://localhost:11434',
+  ollamaModel: 'mistral',
+};
+
+/**
+ * Default Upstox config
+ */
+const DEFAULT_UPSTOX_CONFIG: UpstoxConfig = {
+  apiKey: undefined,
+  apiSecret: undefined,
+  redirectUri: 'http://localhost:3000/callback',
+  accessToken: undefined,
+};
+
+/**
+ * Redaction marker for credentials served over the API or written to disk.
+ */
+const REDACTED = '***';
+
+/**
+ * Mask a credential. A present credential becomes the fixed redaction
+ * marker; an absent one stays undefined.
+ */
+function maskSecret(value?: string): string | undefined {
+  return value ? REDACTED : undefined;
+}
+
+/**
+ * Copy the config with every credential masked. Secrets live only in
+ * memory (loaded from env); anything that leaves the process - the
+ * unauthenticated GET /api/config response, or the persisted runtime.json -
+ * must go through this shape.
+ */
+function redactedConfig(config: RuntimeConfig): RuntimeConfig {
+  return {
+    ...config,
+    llm: {
+      ...config.llm,
+      openrouterApiKey: maskSecret(config.llm.openrouterApiKey),
+      deepseekApiKey: maskSecret(config.llm.deepseekApiKey),
+      openaiApiKey: maskSecret(config.llm.openaiApiKey),
+    },
+    upstox: {
+      ...config.upstox,
+      apiKey: maskSecret(config.upstox.apiKey),
+      apiSecret: maskSecret(config.upstox.apiSecret),
+      accessToken: maskSecret(config.upstox.accessToken),
+    },
+  };
+}
+
+/**
  * Default runtime config
  */
 const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
@@ -93,6 +175,8 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   risk: DEFAULT_CONFIG.riskRules,
   trade: DEFAULT_TRADE_CONFIG,
   indicators: DEFAULT_INDICATOR_CONFIG,
+  llm: DEFAULT_LLM_CONFIG,
+  upstox: DEFAULT_UPSTOX_CONFIG,
   updatedAt: new Date().toISOString(),
 };
 
@@ -108,6 +192,48 @@ export class ConfigManager {
   private constructor(configPath?: string) {
     this.configPath = configPath || path.join(process.cwd(), 'config', 'runtime.json');
     this.config = this.loadConfig();
+    this.loadFromEnv();
+  }
+
+  /**
+   * Load LLM configuration from environment variables
+   */
+  private loadFromEnv(): void {
+    // Load LLM provider from env
+    if (process.env.LLM_PROVIDER) {
+      this.config.llm.provider = process.env.LLM_PROVIDER as LLMProvider;
+    }
+    
+    // Load API keys from env
+    if (process.env.OPENROUTER_API_KEY) {
+      this.config.llm.openrouterApiKey = process.env.OPENROUTER_API_KEY;
+    }
+    if (process.env.DEEPSEEK_API_KEY) {
+      this.config.llm.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+    }
+    if (process.env.OPENAI_API_KEY) {
+      this.config.llm.openaiApiKey = process.env.OPENAI_API_KEY;
+    }
+    if (process.env.OLLAMA_BASE_URL) {
+      this.config.llm.ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
+    }
+    if (process.env.OLLAMA_MODEL) {
+      this.config.llm.ollamaModel = process.env.OLLAMA_MODEL;
+    }
+    
+    // Load Upstox credentials from env
+    if (process.env.UPSTOX_API_KEY) {
+      this.config.upstox.apiKey = process.env.UPSTOX_API_KEY;
+    }
+    if (process.env.UPSTOX_API_SECRET) {
+      this.config.upstox.apiSecret = process.env.UPSTOX_API_SECRET;
+    }
+    if (process.env.UPSTOX_REDIRECT_URI) {
+      this.config.upstox.redirectUri = process.env.UPSTOX_REDIRECT_URI;
+    }
+    if (process.env.UPSTOX_ACCESS_TOKEN) {
+      this.config.upstox.accessToken = process.env.UPSTOX_ACCESS_TOKEN;
+    }
   }
 
   /**
@@ -144,6 +270,8 @@ export class ConfigManager {
           risk: { ...DEFAULT_CONFIG.riskRules, ...savedConfig.risk },
           trade: { ...DEFAULT_TRADE_CONFIG, ...savedConfig.trade },
           indicators: { ...DEFAULT_INDICATOR_CONFIG, ...savedConfig.indicators },
+          llm: { ...DEFAULT_LLM_CONFIG, ...savedConfig.llm },
+          upstox: { ...DEFAULT_UPSTOX_CONFIG, ...savedConfig.upstox },
           updatedAt: savedConfig.updatedAt || new Date().toISOString(),
         };
       }
@@ -166,7 +294,9 @@ export class ConfigManager {
       }
       
       this.config.updatedAt = new Date().toISOString();
-      fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
+      // Persist a REDACTED copy: credentials are env-only and must never be
+      // written to a config file that could be committed to the repository.
+      fs.writeFileSync(this.configPath, JSON.stringify(redactedConfig(this.config), null, 2));
       console.log('[ConfigManager] Config saved to', this.configPath);
     } catch (error) {
       console.error('[ConfigManager] Error saving config:', error);
@@ -245,9 +375,13 @@ export class ConfigManager {
 
   /**
    * Get full runtime config
+   *
+   * Credentials are REDACTED: this object is served by the unauthenticated
+   * GET /api/config endpoint. Internal consumers that need the real values
+   * use getLLM() / getUpstox().
    */
   getFullConfig(): RuntimeConfig {
-    return { ...this.config };
+    return redactedConfig(this.config);
   }
 
   /**
@@ -361,6 +495,26 @@ export class ConfigManager {
   }
 
   /**
+   * Get LLM configuration
+   *
+   * Returns the REAL credentials for internal consumers (LLMService). The
+   * API-facing getFullConfig() redacts them.
+   */
+  getLLM(): LLMConfig {
+    return { ...this.config.llm };
+  }
+
+  /**
+   * Get Upstox configuration
+   *
+   * Returns the REAL credentials for internal consumers (market data / feed).
+   * The API-facing getFullConfig() redacts them.
+   */
+  getUpstox(): UpstoxConfig {
+    return { ...this.config.upstox };
+  }
+
+  /**
    * Get current preset mode
    */
   getPreset(): PresetMode {
@@ -393,6 +547,7 @@ export class ConfigManager {
     account: AccountConfig;
     trade: TradeConfig;
     indicators: IndicatorConfig;
+    upstox: UpstoxConfig;
   } {
     return {
       filters: { ...DEFAULT_FILTER_CONFIG },
@@ -400,6 +555,7 @@ export class ConfigManager {
       account: { ...DEFAULT_ACCOUNT_CONFIG },
       trade: { ...DEFAULT_TRADE_CONFIG },
       indicators: { ...DEFAULT_INDICATOR_CONFIG },
+      upstox: { ...DEFAULT_UPSTOX_CONFIG },
     };
   }
 }

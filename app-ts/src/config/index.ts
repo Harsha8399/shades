@@ -31,6 +31,8 @@ export {
   AccountConfig,
   TradeConfig,
   IndicatorConfig,
+  LLMConfig,
+  UpstoxConfig,
 } from './ConfigManager';
 
 // Broker Profiles

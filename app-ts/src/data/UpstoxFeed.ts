@@ -10,6 +10,7 @@
  * Get API key from: https://developer.upstox.com/
  */
 import { Candle, Timeframe } from '../types';
+import { EventEmitter } from 'events';
 
 /**
  * Upstox API configuration
@@ -49,12 +50,33 @@ interface UpstoxOHLCV {
 }
 
 /**
- * Timeframe to Upstox interval mapping
+ * WebSocket message types
  */
-const TIMEFRAME_MAP: Record<Timeframe, string> = {
+interface WSMessage {
+  type: string;
+  data?: any;
+}
+
+interface WSTickData {
+  instrument_key: string;
+  last_price: number;
+  last_quantity: number;
+  timestamp: number;
+  oi?: number;
+  depth?: {
+    buy: Array<{ price: number; quantity: number; orders: number }>;
+    sell: Array<{ price: number; quantity: number; orders: number }>;
+  };
+}
+
+/**
+ * Timeframe to Upstox interval mapping (V2 format)
+ */
+const TIMEFRAME_MAP_V2: Record<string, string> = {
   '1m': '1minute',
   '5m': '5minute',
   '15m': '15minute',
+  '30m': '30minute',
   '1h': '1hour',
   '4h': '4hour',
   '1d': 'day',
@@ -62,20 +84,100 @@ const TIMEFRAME_MAP: Record<Timeframe, string> = {
 };
 
 /**
+ * Timeframe to Upstox V3 unit/interval mapping
+ * V3 uses separate unit and interval parameters
+ * V3 supports:
+ * - minutes: intervals 1 through 300 (1m, 5m, 15m, 30m, 60m, etc.)
+ * - hours: intervals 1 through 5 (1h, 2h, 3h, 4h, 5h)
+ * - days: interval 1
+ * - weeks: interval 1
+ * - months: interval 1
+ */
+export const TIMEFRAME_MAP_V3: Record<string, { unit: string; interval: string }> = {
+  // Minutes (1-300)
+  '1m': { unit: 'minutes', interval: '1' },
+  '5m': { unit: 'minutes', interval: '5' },
+  '15m': { unit: 'minutes', interval: '15' },
+  '30m': { unit: 'minutes', interval: '30' },
+  '1h': { unit: 'minutes', interval: '60' },  // 60 minutes = 1 hour
+  // Hours (1-5)
+  '2h': { unit: 'hours', interval: '2' },
+  '3h': { unit: 'hours', interval: '3' },
+  '4h': { unit: 'hours', interval: '4' },
+  '5h': { unit: 'hours', interval: '5' },
+  // Days, weeks, months (interval 1 only)
+  '1d': { unit: 'days', interval: '1' },
+  '1w': { unit: 'weeks', interval: '1' },
+  '1mo': { unit: 'months', interval: '1' },
+};
+
+export const HISTORICAL_LIMITS: Record<string, { maxDays: number; unit: string; interval: string }> = {
+  '1m':  { maxDays: 30,  unit: 'minutes', interval: '1' },
+  '5m':  { maxDays: 30,  unit: 'minutes', interval: '5' },
+  '15m': { maxDays: 30,  unit: 'minutes', interval: '15' },
+  '30m': { maxDays: 90,  unit: 'minutes', interval: '30' },
+  '1h':  { maxDays: 90,  unit: 'minutes', interval: '60' },
+  '2h':  { maxDays: 90,  unit: 'hours', interval: '2' },
+  '3h':  { maxDays: 90,  unit: 'hours', interval: '3' },
+  '4h':  { maxDays: 90,  unit: 'hours', interval: '4' },
+  '5h':  { maxDays: 90,  unit: 'hours', interval: '5' },
+  '1d':  { maxDays: 3650, unit: 'days', interval: '1' },
+  '1w':  { maxDays: 3650, unit: 'weeks', interval: '1' },
+  '1mo': { maxDays: 3650, unit: 'months', interval: '1' },
+};
+
+/**
  * Upstox API base URLs
  */
-const UPSTOX_API_BASE = 'https://api.upstox.com/v2';
-const UPSTOX_AUTH_URL = 'https://api.upstox.com/v2/login/authorization/dialog';
+export const UPSTOX_API_BASE_V2 = 'https://api.upstox.com/v2';
+export const UPSTOX_API_BASE_V3 = 'https://api.upstox.com/v3';
+export const UPSTOX_AUTH_URL = 'https://api.upstox.com/v2/login/authorization/dialog';
+export const UPSTOX_WS_URL = 'wss://api.upstox.com/v2/feed/market-data-feed';
+
+/**
+ * WebSocket subscription modes
+ */
+export type WSMode = 'ltpc' | 'full' | 'full_d30' | 'option_greeks';
+
+/**
+ * WebSocket message types
+ */
+interface WSMessage {
+  type: string;
+  data?: any;
+}
+
+interface WSTickData {
+  instrument_key: string;
+  last_price: number;
+  last_quantity: number;
+  timestamp: number;
+  oi?: number;
+  depth?: {
+    buy: Array<{ price: number; quantity: number; orders: number }>;
+    sell: Array<{ price: number; quantity: number; orders: number }>;
+  };
+}
 
 /**
  * Upstox Feed class
  */
-export class UpstoxFeed {
+export class UpstoxFeed extends EventEmitter {
   private config: UpstoxConfig;
   private accessToken: string | null = null;
   private instruments: Map<string, UpstoxInstrument> = new Map();
+  private ws: WebSocket | null = null;
+  private wsConnected = false;
+  private subscribedKeys: Set<string> = new Set(); // instrumentKey
+  private subscribedModes: Map<string, WSMode> = new Map(); // instrumentKey -> mode
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 5000;
+  private wsUrl: string | null = null;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
   
   constructor(config: UpstoxConfig) {
+    super();
     this.config = config;
     this.accessToken = config.accessToken || null;
   }
@@ -97,7 +199,7 @@ export class UpstoxFeed {
    * Exchange authorization code for access token
    */
   async exchangeCode(authCode: string): Promise<string> {
-    const response = await fetch(`${UPSTOX_API_BASE}/login/authorization/token`, {
+    const response = await fetch(`${UPSTOX_API_BASE_V2}/login/authorization/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -133,18 +235,18 @@ export class UpstoxFeed {
    * Check if authenticated
    */
   isAuthenticated(): boolean {
-    return this.accessToken !== null;
+    return !!this.accessToken;
   }
   
   /**
-   * Make authenticated API request
+   * Make authenticated API request (V2 base)
    */
   private async apiRequest<T = any>(endpoint: string, method: string = 'GET'): Promise<T> {
     if (!this.accessToken) {
       throw new Error('Not authenticated. Call exchangeCode() first.');
     }
     
-    const response = await fetch(`${UPSTOX_API_BASE}${endpoint}`, {
+    const response = await fetch(`${UPSTOX_API_BASE_V2}${endpoint}`, {
       method,
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
@@ -153,22 +255,196 @@ export class UpstoxFeed {
     });
     
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
+      const body = await response.text();
+      throw new Error(`API request failed: ${response.status} ${response.statusText} - ${body}`);
     }
     
     return response.json() as Promise<T>;
   }
   
   /**
-   * Get historical candle data
+   * Make authenticated API request (V3 base for historical data)
+   */
+  private async apiRequestV3<T = any>(endpoint: string, method: string = 'GET'): Promise<T> {
+    if (!this.accessToken) {
+      throw new Error('Not authenticated. Call exchangeCode() first.');
+    }
+    
+    const response = await fetch(`${UPSTOX_API_BASE_V3}${endpoint}`, {
+      method,
+      headers: {
+        'Authorization': `Bearer ${this.accessToken}`,
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`V3 API request failed: ${response.status} ${response.statusText} - ${body}`);
+    }
+    
+    return response.json() as Promise<T>;
+  }
+  
+  /**
+   * Parse Upstox timestamp string to UTC epoch milliseconds.
+   * Upstox returns naive IST timestamps (e.g., "2024-01-01 09:15:00").
+   * This function handles:
+   * - Naive timestamps (assumed IST): appends +05:30
+   * - Timestamps with explicit offset (e.g., +05:30, Z): uses as-is
+   * - Rejects malformed timestamps with clear error
+   */
+  private static parseUpstoxTimestamp(ts: string): number {
+    const trimmed = ts.trim();
+    
+    // Check if timestamp already has explicit timezone (Z or +/-HH:MM)
+    const hasExplicitZone = /[Zz]$/.test(trimmed) || /[+-]\d{2}:?\d{2}$/.test(trimmed);
+    const withZone = hasExplicitZone ? trimmed : `${trimmed}+05:30`;
+    
+    const epochMs = new Date(withZone).getTime();
+    if (isNaN(epochMs)) {
+      throw new Error(`Invalid Upstox timestamp: "${ts}"`);
+    }
+    return epochMs;
+  }
+
+  /**
+   * Get historical candle data using V3 API
+   * V3 endpoint: /historical-candle/:instrument_key/:unit/:interval/:to_date/:from_date
+   * V3 supports: minutes (1-300), hours (1-5), days/weeks/months (1)
+   * Historical limits per V3:
+   * - minutes 1-15: 1 month
+   * - minutes >15: 1 quarter
+   * - hours: 1 quarter
+   * - days: 1 decade
+   * - weeks/months: no limit
+   */
+  /**
+   * Get historical candle data, optionally merging with intraday data for current day
+   * @param includeIntraday - If true and toDate is today (in IST), fetch and merge intraday data
    */
   async getHistoricalData(
     instrumentKey: string,
     timeframe: Timeframe,
     fromDate: Date,
+    toDate: Date,
+    includeIntraday: boolean = false
+  ): Promise<Candle[]> {
+    // If includeIntraday is true and toDate is today (in IST), we need to merge
+    if (includeIntraday) {
+      return this.getHistoricalDataWithIntraday(instrumentKey, timeframe, fromDate, toDate);
+    }
+    
+    const mapping = TIMEFRAME_MAP_V3[timeframe];
+    if (!mapping) {
+      throw new Error(`Unsupported timeframe for V3 API: ${timeframe}. Supported: ${Object.keys(TIMEFRAME_MAP_V3).join(', ')}`);
+    }
+    return this.getHistoricalDataV3(instrumentKey, timeframe, fromDate, toDate);
+  }
+  
+  /**
+   * Get historical data merged with intraday data for the current day
+   * This is used when the replay end date is "now" to get the latest available candles
+   */
+  private async getHistoricalDataWithIntraday(
+    instrumentKey: string,
+    timeframe: Timeframe,
+    fromDate: Date,
     toDate: Date
   ): Promise<Candle[]> {
-    const interval = TIMEFRAME_MAP[timeframe];
+    // Determine if toDate is today in IST
+    const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const toDateIST = new Date(toDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    
+    const isToday = toDateIST.toDateString() === nowIST.toDateString()
+    
+    if (!isToday) {
+      // If not today, just use historical endpoint
+      return this.getHistoricalDataV3(instrumentKey, timeframe, fromDate, toDate)
+    }
+    
+    // Fetch historical data up to yesterday (to avoid overlap)
+    const yesterdayIST = new Date(nowIST)
+    yesterdayIST.setDate(yesterdayIST.getDate() - 1)
+    const yesterdayUTC = new Date(yesterdayIST.toLocaleString('en-US', { timeZone: 'UTC' }))
+    
+    let historicalCandles: Candle[] = []
+    try {
+      // Only fetch historical if fromDate is before today
+      const fromDateIST = new Date(fromDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+      if (fromDateIST < nowIST) {
+        historicalCandles = await this.getHistoricalDataV3(instrumentKey, timeframe, fromDate, yesterdayUTC)
+      }
+    } catch (error) {
+      console.warn('[UpstoxFeed] Historical data fetch failed, continuing with intraday only:', error)
+    }
+    
+    // Fetch intraday data for today
+    let intradayCandles: Candle[] = []
+    try {
+      intradayCandles = await this.getIntradayDataV3(instrumentKey, timeframe)
+    } catch (error) {
+      console.warn('[UpstoxFeed] Intraday data fetch failed, using historical only:', error)
+    }
+    
+    // Merge and deduplicate
+    const allCandles = [...historicalCandles, ...intradayCandles]
+    
+    // Sort by timestamp
+    allCandles.sort((a, b) => a.timestamp - b.timestamp)
+    
+    // Deduplicate by timestamp (keep the last one)
+    const deduped: Candle[] = []
+    for (const c of allCandles) {
+      if (deduped.length === 0 || deduped[deduped.length - 1].timestamp !== c.timestamp) {
+        deduped.push(c)
+      }
+    }
+    
+    // Filter to requested range (fromDate to toDate)
+    const filtered = deduped.filter(c => c.timestamp >= fromDate.getTime() && c.timestamp <= toDate.getTime())
+    
+    return filtered
+  }
+  
+  private async getHistoricalDataV3(
+    instrumentKey: string,
+    timeframe: Timeframe,
+    fromDate: Date,
+    toDate: Date
+  ): Promise<Candle[]> {
+    const mapping = TIMEFRAME_MAP_V3[timeframe];
+    if (!mapping) {
+      throw new Error(`Unsupported timeframe for V3 API: ${timeframe}`);
+    }
+    const { unit, interval } = mapping;
+    const from = fromDate.toISOString().split('T')[0];
+    const to = toDate.toISOString().split('T')[0];
+    const endpoint = `/historical-candle/${encodeURIComponent(instrumentKey)}/${unit}/${interval}/${to}/${from}`;
+    const response = await this.apiRequestV3<{ data?: { candles?: any[][] } }>(endpoint);
+    if (!response.data || !response.data.candles) {
+      return [];
+    }
+    return response.data.candles.map((c: any[]) => ({
+      timestamp: UpstoxFeed.parseUpstoxTimestamp(c[0]),
+      open: c[1],
+      high: c[2],
+      low: c[3],
+      close: c[4],
+      volume: c[5] || 0,
+    })).reverse();
+  }
+
+  /**
+   * Get historical candle data using legacy V2 API (fallback)
+   */
+  async getHistoricalDataV2(
+    instrumentKey: string,
+    timeframe: Timeframe,
+    fromDate: Date,
+    toDate: Date
+  ): Promise<Candle[]> {
+    const interval = TIMEFRAME_MAP_V2[timeframe];
     const from = fromDate.toISOString().split('T')[0];
     const to = toDate.toISOString().split('T')[0];
     
@@ -180,26 +456,52 @@ export class UpstoxFeed {
       return [];
     }
     
-    // Convert Upstox format to our Candle format
-    // Upstox returns: [timestamp, open, high, low, close, volume, oi]
-    return response.data.candles.map((c: any[]) => ({
-      timestamp: new Date(c[0]).getTime(),
+return response.data.candles.map((c: any[]) => ({
+      timestamp: UpstoxFeed.parseUpstoxTimestamp(c[0]),
       open: c[1],
       high: c[2],
       low: c[3],
       close: c[4],
       volume: c[5] || 0,
-    })).reverse(); // Upstox returns newest first
+    })).reverse();
   }
-  
+
   /**
-   * Get intraday candle data (today's data)
+   * Get intraday candle data (today's data) using V3 API
+   * Uses the V3 intraday endpoint for current-day data
    */
-  async getIntradayData(
+  async getIntradayDataV3(
     instrumentKey: string,
     timeframe: Timeframe
   ): Promise<Candle[]> {
-    const interval = TIMEFRAME_MAP[timeframe];
+    const mapping = TIMEFRAME_MAP_V3[timeframe];
+    if (!mapping) {
+      throw new Error(`Unsupported timeframe for V3 intraday API: ${timeframe}`);
+    }
+    const { unit, interval } = mapping;
+    const endpoint = `/historical-candle/intraday/${encodeURIComponent(instrumentKey)}/${unit}/${interval}`;
+    const response = await this.apiRequestV3<{ data?: { candles?: any[][] } }>(endpoint);
+    if (!response.data || !response.data.candles) {
+      return [];
+    }
+    return response.data.candles.map((c: any[]) => ({
+      timestamp: UpstoxFeed.parseUpstoxTimestamp(c[0]),
+      open: c[1],
+      high: c[2],
+      low: c[3],
+      close: c[4],
+      volume: c[5] || 0,
+    })).reverse();
+  }
+  
+  /**
+   * Get intraday candle data using legacy V2 API
+   */
+  async getIntradayDataV2(
+    instrumentKey: string,
+    timeframe: Timeframe
+  ): Promise<Candle[]> {
+    const interval = TIMEFRAME_MAP_V2[timeframe];
     
     const endpoint = `/historical-candle/intraday/${encodeURIComponent(instrumentKey)}/${interval}`;
     
@@ -209,8 +511,8 @@ export class UpstoxFeed {
       return [];
     }
     
-    return response.data.candles.map((c: any[]) => ({
-      timestamp: new Date(c[0]).getTime(),
+return response.data.candles.map((c: any[]) => ({
+      timestamp: UpstoxFeed.parseUpstoxTimestamp(c[0]),
       open: c[1],
       high: c[2],
       low: c[3],
@@ -218,7 +520,7 @@ export class UpstoxFeed {
       volume: c[5] || 0,
     })).reverse();
   }
-  
+
   /**
    * Get market quote (current price)
    */
@@ -309,6 +611,8 @@ export class UpstoxFeed {
       'MARUTI': 'NSE_EQ|INE585B01010',
       'BAJFINANCE': 'NSE_EQ|INE296A01024',
       'TATAMOTORS': 'NSE_EQ|INE155A01022',
+      'NIFTY50': 'NSE_INDEX|Nifty 50',
+      'NIFTY': 'NSE_INDEX|Nifty 50',
     };
   }
   
@@ -337,6 +641,219 @@ export class UpstoxFeed {
       'NIFTYIT': 'NSE_INDEX|Nifty IT',
       'NIFTYMIDCAP': 'NSE_INDEX|NIFTY MIDCAP 100',
     };
+  }
+
+  /**
+   * Connect to Upstox WebSocket for real-time market data
+   */
+  async connectWebSocket(): Promise<void> {
+    if (!this.accessToken) {
+      throw new Error('Not authenticated. Call exchangeCode() or setAccessToken() first.');
+    }
+
+    if (this.wsConnected && this.ws) {
+      console.log('[UpstoxFeed] WebSocket already connected');
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        // Upstox WebSocket URL with authorization
+        const wsUrl = `${UPSTOX_WS_URL}?authorization=${this.accessToken}`;
+        this.ws = new WebSocket(wsUrl);
+
+        this.ws.onopen = () => {
+          console.log('[UpstoxFeed] WebSocket connected');
+          this.wsConnected = true;
+          this.reconnectAttempts = 0;
+          
+          // Resubscribe to previously subscribed instruments
+          if (this.subscribedKeys.size > 0) {
+            this.subscribeToInstruments(Array.from(this.subscribedKeys), 'full');
+          }
+          
+          this.emit('connected');
+          resolve();
+        };
+
+        this.ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            this.handleWebSocketMessage(message);
+          } catch (error) {
+            console.error('[UpstoxFeed] Error parsing WebSocket message:', error);
+          }
+        };
+
+        this.ws.onerror = (error) => {
+          console.error('[UpstoxFeed] WebSocket error:', error);
+          this.emit('error', error);
+        };
+
+        this.ws.onclose = (event) => {
+          console.log('[UpstoxFeed] WebSocket closed:', event.code, event.reason);
+          this.wsConnected = false;
+          this.ws = null;
+          this.emit('disconnected', event);
+          
+          // Attempt reconnection
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            console.log(`[UpstoxFeed] Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+            setTimeout(() => this.connectWebSocket(), this.reconnectDelay);
+          } else {
+            console.error('[UpstoxFeed] Max reconnection attempts reached');
+            this.emit('reconnect_failed');
+          }
+        };
+
+        // Timeout for connection
+        setTimeout(() => {
+          if (!this.wsConnected) {
+            reject(new Error('WebSocket connection timeout'));
+          }
+        }, 10000);
+
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Subscribe to real-time market data for instruments
+   */
+  subscribeToInstruments(instrumentKeys: string[], mode: WSMode = 'full'): void {
+    if (!this.wsConnected || !this.ws) {
+      console.warn('[UpstoxFeed] WebSocket not connected. Call connectWebSocket() first.');
+      return;
+    }
+
+    const newKeys = instrumentKeys.filter(key => !this.subscribedKeys.has(key));
+    if (newKeys.length === 0) return;
+
+    // Upstox WebSocket subscription format
+    const message = {
+      method: 'subscribe',
+      instruments: newKeys.map(key => ({
+        instrument_key: key,
+        mode: mode
+      }))
+    };
+
+    this.ws!.send(JSON.stringify(message));
+    
+    for (const key of newKeys) {
+      this.subscribedKeys.add(key);
+      this.subscribedModes.set(key, mode);
+    }
+    
+    console.log(`[UpstoxFeed] Subscribed to ${newKeys.length} instruments in ${mode} mode`);
+  }
+
+  /**
+   * Unsubscribe from instruments
+   */
+  unsubscribeFromInstruments(instrumentKeys: string[]): void {
+    if (!this.wsConnected || !this.ws) return;
+
+    const message = {
+      method: 'unsubscribe',
+      instruments: instrumentKeys.map(key => ({
+        instrument_key: key
+      }))
+    };
+
+    this.ws!.send(JSON.stringify(message));
+    
+    for (const key of instrumentKeys) {
+      this.subscribedKeys.delete(key);
+      this.subscribedModes.delete(key);
+    }
+    
+    console.log(`[UpstoxFeed] Unsubscribed from ${instrumentKeys.length} instruments`);
+  }
+
+  /**
+   * Handle incoming WebSocket messages
+   */
+  private handleWebSocketMessage(message: any): void {
+    // Handle different message types from Upstox
+    switch (message.type) {
+      case 'tick':
+      case 'ltpc':
+      case 'full':
+        if (message.data) {
+          this.handleTickData(message.data);
+        }
+        break;
+      case 'subscribe':
+      case 'unsubscribe':
+        console.log(`[UpstoxFeed] ${message.type} acknowledged:`, message.data);
+        break;
+      case 'error':
+        console.error('[UpstoxFeed] WebSocket error message:', message.data);
+        this.emit('error', new Error(message.data?.message || 'Unknown error'));
+        break;
+      default:
+        // Handle direct tick data (Upstox sends tick data directly)
+        if (message.instrument_key || message.data?.instrument_key) {
+          this.handleTickData(message.data || message);
+        }
+    }
+  }
+
+  /**
+   * Handle tick data and emit events
+   */
+  private handleTickData(data: WSTickData): void {
+    const tick = {
+      instrumentKey: data.instrument_key,
+      lastPrice: data.last_price,
+      lastQuantity: data.last_quantity,
+      timestamp: data.timestamp,
+      oi: data.oi,
+      depth: data.depth,
+    };
+
+    // Emit tick event for real-time processing
+    this.emit('tick', tick);
+    
+    // Also emit symbol-specific event
+    this.emit(`tick:${data.instrument_key}`, tick);
+  }
+
+  /**
+   * Disconnect WebSocket
+   */
+  disconnectWebSocket(): void {
+    if (this.ws) {
+      this.ws.close(1000, 'Client disconnect');
+      this.ws = null;
+      this.wsConnected = false;
+      console.log('[UpstoxFeed] WebSocket disconnected');
+    }
+  }
+
+  /**
+   * Check if WebSocket is connected
+   */
+  isWebSocketConnected(): boolean {
+    return this.wsConnected && this.ws !== null;
+  }
+
+  /**
+   * Get subscribed instrument keys
+   */
+  getSubscribedKeys(): string[] {
+    return Array.from(this.subscribedKeys);
+  }
+
+  /**
+   * Get subscribed instrument keys with their modes
+   */
+  getSubscribedKeysWithModes(): Map<string, WSMode> {
+    return new Map(this.subscribedModes);
   }
 }
 

@@ -5,6 +5,7 @@
  * A pullback entry on 1H that aligns with Daily uptrend is far more reliable.
  */
 import { Timeframe, Direction } from './candle';
+import { getSpec } from '../strategies/strategySpec';
 
 /**
  * Bias direction for a timeframe
@@ -95,17 +96,36 @@ export const DEFAULT_MTF_CONFIG: MTFConfig = {
 };
 
 /**
- * Standard timeframe hierarchy for MTF analysis
+ * Standard timeframe hierarchy for MTF analysis.
+ * Reads from shared/fixtures/strategy_spec.json MTF_TIMEFRAME_HIERARCHY.
+ * Falls back to hardcoded mapping if spec is unavailable.
  */
-export const TIMEFRAME_HIERARCHY: Record<Timeframe, Timeframe> = {
-  '1m': '15m',
-  '5m': '1h',
-  '15m': '4h',
-  '1h': '4h',
-  '4h': '1d',
-  '1d': '1w',
-  '1w': '1w', // Weekly is top
-};
+function loadHierarchyFromSpec(): Record<Timeframe, Timeframe> {
+  try {
+    const spec = getSpec();
+    const hierarchy = spec.value<Record<Timeframe, Timeframe>>('MTF_TIMEFRAME_HIERARCHY');
+    if (hierarchy) {
+      // Ensure weekly maps to itself
+      const result = { ...hierarchy, '1w': '1w' } as Record<Timeframe, Timeframe>;
+      return result;
+    }
+  } catch {
+    // Spec unavailable, use fallback
+  }
+  // Fallback mapping (matches current hardcoded values)
+  return {
+    '1m': '5m',
+    '5m': '1h',
+    '15m': '4h',
+    '30m': '1h',
+    '1h': '4h',
+    '4h': '1d',
+    '1d': '1w',
+    '1w': '1w',
+  };
+}
+
+export const TIMEFRAME_HIERARCHY: Record<Timeframe, Timeframe> = loadHierarchyFromSpec();
 
 /**
  * Get the higher timeframe for any given timeframe

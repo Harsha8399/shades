@@ -31,16 +31,18 @@ export const FIB_RATIOS = [0.236, 0.382, 0.5, 0.618, 0.786];
  * @param swingHigh - High point of the swing
  * @param swingLow - Low point of the swing
  * @param direction - Direction of the original move
+ * @param ratios - Optional custom Fibonacci ratios (defaults to standard FIB_RATIOS)
  */
 export function calculateFibLevels(
   swingHigh: number,
   swingLow: number,
-  direction: 'UP' | 'DOWN'
+  direction: 'UP' | 'DOWN',
+  ratios: number[] = FIB_RATIOS
 ): FibLevel[] {
   const range = swingHigh - swingLow;
   const levels: FibLevel[] = [];
   
-  for (const ratio of FIB_RATIOS) {
+  for (const ratio of ratios) {
     let price: number;
     
     if (direction === 'UP') {
@@ -66,20 +68,26 @@ export function calculateFibLevels(
  * 
  * @param candles - Array of OHLCV candles
  * @param lookback - How far back to look for swing (default: 50)
+ * @param ratios - Optional custom Fibonacci ratios (defaults to standard FIB_RATIOS)
  */
-export function findFibRetracement(candles: Candle[], lookback: number = 50): FibRetracement | null {
-  const swings = findSwingPoints(candles.slice(-lookback), 5, 3);
+export function findFibRetracement(candles: Candle[], lookback: number = 50, ratios?: number[]): FibRetracement | null {
+  const window = candles.slice(-lookback);
+  if (window.length === 0) return null;
+
+  // Confirmed swing points inside the window.
+  const swings = findSwingPoints(window, 5, 3);
   
-  if (swings.length < 2) {
+  if (swings.length === 0) {
     return null;
   }
-  
-  // Find most recent significant swing
-  const recentSwings = swings.slice(-4);
-  
-  // Look for high-low pair
-  const highs = recentSwings.filter(s => s.type === 'HIGH');
-  const lows = recentSwings.filter(s => s.type === 'LOW');
+
+  // Scan from most recent to oldest, taking the first HIGH and the first LOW
+  // found. The previous implementation looked only at the last 4 swings and
+  // returned null when they did not contain both a high and a low, which
+  // silently dropped the Fibonacci confirmation factor depending on the shape
+  // of the recent swings. The Python engine now matches this behaviour.
+  const highs = swings.filter(s => s.type === 'HIGH');
+  const lows = swings.filter(s => s.type === 'LOW');
   
   if (highs.length === 0 || lows.length === 0) {
     return null;
@@ -91,7 +99,7 @@ export function findFibRetracement(candles: Candle[], lookback: number = 50): Fi
   // Determine direction based on which came first
   const direction: 'UP' | 'DOWN' = lastLow.index < lastHigh.index ? 'UP' : 'DOWN';
   
-  const levels = calculateFibLevels(lastHigh.price, lastLow.price, direction);
+  const levels = calculateFibLevels(lastHigh.price, lastLow.price, direction, ratios);
   
   return {
     swingHigh: lastHigh.price,

@@ -36,10 +36,12 @@ export interface Pattern {
   /**
    * Detect if pattern conditions are met
    * Returns null if no signal, Signal object if conditions met
+   * @param absoluteCandleIndex - Optional absolute index in the full replay dataset
    */
   detectSignal(
     candles: Candle[],
-    context: MarketContext
+    context: MarketContext,
+    absoluteCandleIndex?: number
   ): Signal | null;
   
   /**

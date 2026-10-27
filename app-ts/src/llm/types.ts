@@ -7,7 +7,7 @@
 /**
  * Supported LLM providers
  */
-export type LLMProvider = 'ollama' | 'deepseek' | 'openai';
+export type LLMProvider = 'ollama' | 'deepseek' | 'openai' | 'openrouter';
 
 /**
  * LLM provider configuration
@@ -47,6 +47,15 @@ export const DEFAULT_OPENAI_CONFIG: LLMProviderConfig = {
   provider: 'openai',
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o-mini',
+  temperature: 0.3,
+  maxTokens: 4096,
+  timeoutMs: 60_000,
+};
+
+export const DEFAULT_OPENROUTER_CONFIG: LLMProviderConfig = {
+  provider: 'openrouter',
+  baseUrl: 'https://openrouter.ai/api/v1',
+  model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
   temperature: 0.3,
   maxTokens: 4096,
   timeoutMs: 60_000,

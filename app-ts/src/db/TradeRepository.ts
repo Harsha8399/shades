@@ -91,7 +91,12 @@ export class TradeRepository {
    * Create a new trade from a signal
    */
   createFromSignal(signal: Signal, quantity: number, riskAmount: number, riskPercent: number): Trade {
-    const now = new Date();
+    // The signal carries the timestamp of the candle that produced it
+    // (Signal.timestamp, set from the candle in BasePattern). Using it here
+    // means a replayed trade is timestamped by market time rather than by the
+    // wall clock, which is what allows trade-level parity with the research
+    // engine. See DIV-12 in shared/fixtures/strategy_spec.json.
+    const now = new Date(signal.timestamp);
     const expiryTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
     
     const trade: Trade = {

@@ -6,7 +6,7 @@ numpy>=1.24.0
 scipy>=1.11.0
 
 # Technical Analysis - Industry Standard
-pandas-ta>=0.3.14b
+pandas-ta>=0.4.71b
 # TA-Lib requires system installation: apt-get install ta-lib or brew install ta-lib
 # ta-lib>=0.4.28
 

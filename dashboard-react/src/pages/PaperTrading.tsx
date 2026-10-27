@@ -6,7 +6,6 @@ import {
   X,
   FileText,
   TrendingUp,
-  TrendingDown,
   Loader2,
   CheckCircle,
   AlertCircle,
@@ -14,7 +13,6 @@ import {
   DollarSign,
   Target,
   ShieldAlert,
-  Clock,
   Filter,
   ArrowUpRight,
   ArrowDownRight,
@@ -97,9 +95,9 @@ export function PaperTrading() {
       <div className="flex gap-2 border-b border-slate-700/50 pb-0">
         {([
           { key: 'open', label: 'Open Trades', icon: Target, count: openTrades.length },
-          { key: 'lookup', label: 'Symbol Lookup', icon: Search },
-          { key: 'manual', label: 'New Trade', icon: Plus },
-          { key: 'simulate', label: 'Run Simulation', icon: Play },
+          { key: 'lookup', label: 'Symbol Lookup', icon: Search, count: 0 },
+          { key: 'manual', label: 'New Trade', icon: Plus, count: 0 },
+          { key: 'simulate', label: 'Run Simulation', icon: Play, count: 0 },
         ] as const).map(({ key, label, icon: Icon, count }) => (
           <button
             key={key}

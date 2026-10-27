@@ -103,26 +103,36 @@ def calculate_metrics(
     trades: List[Dict[str, Any]],
     equity_curve: pd.Series,
     initial_capital: float,
+    periods_per_year: Optional[float] = None,
 ) -> BacktestMetrics:
     """
     Calculate comprehensive backtest metrics using quantstats when available.
-    
+
     Args:
         trades: List of trade dictionaries with 'pnl' and 'r_multiple' keys
         equity_curve: Series of equity values over time
         initial_capital: Starting capital
-    
+        periods_per_year: Bars per year used to annualise Sharpe/Sortino/
+            volatility. If None, falls back to 252 (daily convention), which
+            is only correct for daily data. Intraday data must supply the
+            correct value (e.g. ~8766 for hourly bars).
+
     Returns:
         BacktestMetrics object
     """
     if not trades:
         return _empty_metrics()
-    
+
+    if periods_per_year is None:
+        periods_per_year = 252.0
+
     # Trade statistics (always custom - trade-specific)
     trade_stats = _calculate_trade_stats(trades)
-    
+
     # Portfolio metrics (use libraries when available)
-    portfolio_stats = _calculate_portfolio_stats(equity_curve, initial_capital)
+    portfolio_stats = _calculate_portfolio_stats(
+        equity_curve, initial_capital, periods_per_year
+    )
     
     return BacktestMetrics(
         total_trades=trade_stats['total_trades'],
@@ -184,38 +194,53 @@ def _calculate_trade_stats(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _calculate_portfolio_stats(equity_curve: pd.Series, initial_capital: float) -> Dict[str, Any]:
+def _calculate_portfolio_stats(
+    equity_curve: pd.Series,
+    initial_capital: float,
+    periods_per_year: float = 252.0,
+) -> Dict[str, Any]:
     """Calculate portfolio-level statistics using quantstats/empyrical."""
     if len(equity_curve) < 2:
         return _empty_portfolio_stats()
-    
+
     # Calculate returns
     returns = equity_curve.pct_change().dropna()
-    
+
     if HAS_QUANTSTATS:
-        return _calculate_with_quantstats(returns, equity_curve, initial_capital)
+        return _calculate_with_quantstats(
+            returns, equity_curve, initial_capital, periods_per_year
+        )
     elif HAS_EMPYRICAL:
-        return _calculate_with_empyrical(returns, equity_curve, initial_capital)
+        return _calculate_with_empyrical(
+            returns, equity_curve, initial_capital, periods_per_year
+        )
     else:
-        return _calculate_fallback(returns, equity_curve, initial_capital)
+        return _calculate_fallback(
+            returns, equity_curve, initial_capital, periods_per_year
+        )
 
 
 def _calculate_with_quantstats(
     returns: pd.Series, 
     equity_curve: pd.Series, 
-    initial_capital: float
+    initial_capital: float,
+    periods_per_year: float = 252.0,
 ) -> Dict[str, Any]:
     """Use quantstats for metrics calculation."""
     # Suppress quantstats output
     import warnings
     warnings.filterwarnings('ignore')
     
-    max_dd = qs.stats.max_drawdown(returns)
-    sharpe = qs.stats.sharpe(returns)
-    sortino = qs.stats.sortino(returns)
-    calmar = qs.stats.calmar(returns)
-    cagr = qs.stats.cagr(returns)
-    volatility = qs.stats.volatility(returns)
+    # NOTE: max_drawdown is computed from the EQUITY curve, not from returns.
+    # quantstats internally converts a returns series into a price series via
+    # _prepare_prices, which is lossy for a strategy whose equity starts at an
+    # arbitrary capital value. Passing the equity curve directly is exact.
+    max_dd = qs.stats.max_drawdown(equity_curve)
+    sharpe = qs.stats.sharpe(returns, periods=periods_per_year)
+    sortino = qs.stats.sortino(returns, periods=periods_per_year)
+    calmar = qs.stats.calmar(returns, periods=periods_per_year)
+    cagr = qs.stats.cagr(returns, periods=periods_per_year)
+    volatility = qs.stats.volatility(returns, periods=periods_per_year)
     
     # Drawdown duration (custom - quantstats doesn't expose this easily)
     dd_duration = _calculate_drawdown_duration(equity_curve)
@@ -238,15 +263,16 @@ def _calculate_with_quantstats(
 def _calculate_with_empyrical(
     returns: pd.Series, 
     equity_curve: pd.Series, 
-    initial_capital: float
+    initial_capital: float,
+    periods_per_year: float = 252.0,
 ) -> Dict[str, Any]:
     """Use empyrical for metrics calculation."""
     max_dd = ep.max_drawdown(returns)
-    sharpe = ep.sharpe_ratio(returns)
-    sortino = ep.sortino_ratio(returns)
-    calmar = ep.calmar_ratio(returns)
-    cagr = ep.annual_return(returns)
-    volatility = ep.annual_volatility(returns)
+    sharpe = ep.sharpe_ratio(returns, annualization=periods_per_year)
+    sortino = ep.sortino_ratio(returns, annualization=periods_per_year)
+    calmar = ep.calmar_ratio(returns, annualization=periods_per_year)
+    cagr = ep.annual_return(returns, annualization=periods_per_year)
+    volatility = ep.annual_volatility(returns, annualization=periods_per_year)
     
     dd_duration = _calculate_drawdown_duration(equity_curve)
     final_equity = equity_curve.iloc[-1]
@@ -267,7 +293,8 @@ def _calculate_with_empyrical(
 def _calculate_fallback(
     returns: pd.Series, 
     equity_curve: pd.Series, 
-    initial_capital: float
+    initial_capital: float,
+    periods_per_year: float = 252.0,
 ) -> Dict[str, Any]:
     """Fallback custom calculations when libraries not available."""
     # Max drawdown
@@ -280,14 +307,14 @@ def _calculate_fallback(
     
     # Sharpe ratio
     if returns.std() > 0:
-        sharpe = (returns.mean() / returns.std()) * np.sqrt(252)
+        sharpe = (returns.mean() / returns.std()) * np.sqrt(periods_per_year)
     else:
         sharpe = 0
     
     # Sortino ratio
     downside = returns[returns < 0]
     if len(downside) > 0 and downside.std() > 0:
-        sortino = (returns.mean() / downside.std()) * np.sqrt(252)
+        sortino = (returns.mean() / downside.std()) * np.sqrt(periods_per_year)
     else:
         sortino = float('inf') if returns.mean() > 0 else 0
     
@@ -296,14 +323,14 @@ def _calculate_fallback(
     total_return = (final_equity - initial_capital) / initial_capital
     
     # CAGR (approximate)
-    years = len(equity_curve) / 252
+    years = len(equity_curve) / periods_per_year
     if years > 0:
         cagr = (final_equity / initial_capital) ** (1 / years) - 1
     else:
         cagr = 0
     
     # Volatility
-    volatility = returns.std() * np.sqrt(252)
+    volatility = returns.std() * np.sqrt(periods_per_year)
     
     # Calmar
     calmar = cagr / max_dd if max_dd > 0 else 0

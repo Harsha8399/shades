@@ -1,6 +1,7 @@
 /**
  * Express API Server for the Trading Dashboard
  */
+import 'dotenv/config';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { TradeRepository } from '../db/TradeRepository';
@@ -17,6 +18,9 @@ import configRouter from './routes/config';
 import { createLLMRouter } from './routes/llm';
 import { createSimulationRouter } from './routes/simulation';
 import { createInstrumentsRouter } from './routes/instruments';
+import { createLiveScannerRouter } from './routes/liveScanner';
+import { createReplayRouter } from './routes/replay';
+import { createNiftyDownloadRouter } from './routes/replay';
 import { DEFAULT_CONFIG } from '../config/default';
 
 export interface ApiServerConfig {
@@ -84,6 +88,9 @@ export class ApiServer {
     this.app.use('/api/llm', createLLMRouter(this.repository));
     this.app.use('/api/simulation', createSimulationRouter(this.repository));
     this.app.use('/api/instruments', createInstrumentsRouter(this.repository));
+    this.app.use('/api/live-scanner', createLiveScannerRouter(this.repository));
+    this.app.use('/api/replay', createReplayRouter());
+    this.app.use('/api/replay/nifty', createNiftyDownloadRouter());
   }
 
   private setupErrorHandling(): void {

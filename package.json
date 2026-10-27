@@ -1,20 +1,20 @@
 {
-  "name": "shades",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Shades - Trading Pattern Research Platform",
-  "scripts": {
-    "install:all": "npm install --prefix app-ts && npm rebuild --prefix app-ts better-sqlite3 && npm install --prefix dashboard-react && pip install -r research-py/requirements.txt",
-    "install:ts": "npm install --prefix app-ts && npm rebuild --prefix app-ts better-sqlite3 && npm install --prefix dashboard-react",
-    "install:py": "pip install -r research-py/requirements.txt",
-    "fix:native": "npm rebuild --prefix app-ts better-sqlite3",
-    "dev": "concurrently -n api,ui -c blue,magenta \"npm run dev:api\" \"npm run dev:ui\"",
-    "dev:api": "npm run api --prefix app-ts",
-    "dev:ui": "npm run dev --prefix dashboard-react",
-    "build": "npm run build --prefix app-ts && npm run build --prefix dashboard-react",
-    "start": "concurrently -n api,ui -c blue,magenta \"npm run api --prefix app-ts\" \"npm run dev --prefix dashboard-react\""
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
-  }
+	"name": "shades",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Shades - Trading Pattern Research Platform",
+	"scripts": {
+		"install:all": "npm install --prefix app-ts && npm rebuild --prefix app-ts better-sqlite3 && npm install --prefix dashboard-react && pip install -r research-py/requirements.txt",
+		"install:ts": "npm install --prefix app-ts && npm rebuild --prefix app-ts better-sqlite3 && npm install --prefix dashboard-react",
+		"install:py": "pip install -r research-py/requirements.txt",
+		"fix:native": "npm rebuild --prefix app-ts better-sqlite3",
+		"dev": "concurrently -n api,ui -c blue,magenta \"npm run dev:api\" \"npm run dev:ui\"",
+		"dev:api": "npm run api --prefix app-ts",
+		"dev:ui": "npm run dev --prefix dashboard-react",
+		"build": "npm run build --prefix app-ts && npm run build --prefix dashboard-react",
+		"start": "concurrently -n api,ui -c blue,magenta \"npm run api --prefix app-ts\" \"npm run dev --prefix dashboard-react\""
+	},
+	"devDependencies": {
+		"concurrently": "^9.1.2"
+	}
 }

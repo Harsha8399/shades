@@ -21,14 +21,18 @@ import pandas as pd
 import numpy as np
 from itertools import product
 
-# Add src to path
+# Add repo root to path so that `src.*` package imports resolve.
+# The previous version added `<repo>/research-py/src` to sys.path and then
+# imported `src.backtesting...`, which can never resolve.
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+from pathlib import Path
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root))
 
-from data.loaders import load_csv
-from backtesting.engine import BacktestEngine, BacktestConfig
-from patterns.confluence_zone import ConfluenceZonePattern
-from patterns.base import BasePattern
+from src.data.loaders import load_csv
+from src.backtesting.engine import BacktestEngine, BacktestConfig
+from src.patterns.confluence_zone import ConfluenceZonePattern
+from src.patterns.base import BasePattern
 
 
 @dataclass
@@ -119,14 +123,15 @@ class WalkForwardOptimizer:
     ) -> BasePattern:
         """Create pattern instance with given parameters"""
         if strategy_name == 'confluence':
-            pattern = ConfluenceZonePattern(
-                sr_lookback=params.get('sr_lookback', 100),
-                min_confluence=params.get('min_confluence', 2),
-                min_wick_ratio=params.get('min_wick_ratio', 2.0),
-            )
-            # Store target RR for use in backtest
-            pattern.target_rr = params.get('target_rr', 2.0)
-            return pattern
+            # The constructor takes a config dict; the individual keyword
+            # arguments below are the names used by the parameter grid.
+            config = {
+                'min_confluence_factors': params.get('min_confluence', 2),
+                'sr_zone_lookback': params.get('sr_lookback', 100),
+                'min_rejection_wick_ratio': params.get('min_wick_ratio', 2.0),
+                'target_rr': params.get('target_rr', 2.0),
+            }
+            return ConfluenceZonePattern(config)
         else:
             # Default to confluence
             return ConfluenceZonePattern()

@@ -84,3 +84,32 @@ export {
   getHTFFor,
 } from './mtf';
 
+// Prediction & Evaluation types
+export {
+  Prediction,
+  EvaluationHorizon,
+  DirectionalEvaluation,
+  StopTargetEvaluation,
+  PredictionEvaluation,
+  EvaluationMetrics,
+  ReplayConfig,
+  ReplayStatus,
+  ReplayResult,
+  ReplayDiagnostics,
+  StrategyFunnel,
+  BaselineComparison,
+  SimulatedTradingSummary,
+  TieRule,
+  AmbiguousResolution,
+} from './prediction';
+
+// Decision trace types
+export {
+  DecisionStageResult,
+  ConditionEvaluation,
+  DecisionStage,
+  DecisionTrace,
+  PredictionSnapshot,
+  DetectedSignal,
+} from './decision';
+

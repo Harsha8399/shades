@@ -4,6 +4,8 @@
  * Main entry point - uses barrel exports from each module
  */
 
+import 'dotenv/config';
+
 // ============================================================
 // Core Module - Pattern detection, trading engine, monitoring
 // ============================================================

@@ -19,6 +19,8 @@ const VALID_ANALYSIS_TYPES: AnalysisType[] = [
   'market_context',
 ];
 
+const VALID_PROVIDERS: LLMProvider[] = ['ollama', 'deepseek', 'openai', 'openrouter'];
+
 export function createLLMRouter(repository: TradeRepository): Router {
   const router = Router();
   const llmService = LLMService.getInstance();
@@ -59,16 +61,15 @@ export function createLLMRouter(repository: TradeRepository): Router {
    * PUT /api/llm/config
    * Update LLM provider configuration
    * 
-   * Body: { provider?: 'ollama' | 'deepseek' | 'openai', model?: string, apiKey?: string, baseUrl?: string }
+   * Body: { provider?: 'ollama' | 'deepseek' | 'openai' | 'openrouter', model?: string, apiKey?: string, baseUrl?: string }
    */
   router.put('/config', (req: Request, res: Response) => {
     try {
       const { provider, model, apiKey, baseUrl, temperature, maxTokens } = req.body;
 
       if (provider) {
-        const validProviders: LLMProvider[] = ['ollama', 'deepseek', 'openai'];
-        if (!validProviders.includes(provider)) {
-          return res.status(400).json({ error: `Invalid provider. Use: ${validProviders.join(', ')}` });
+        if (!VALID_PROVIDERS.includes(provider)) {
+          return res.status(400).json({ error: `Invalid provider. Use: ${VALID_PROVIDERS.join(', ')}` });
         }
 
         // Update config for the provider

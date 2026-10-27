@@ -6,6 +6,8 @@ import numpy as np
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 
+from .trendlines import find_swing_points
+
 
 # Standard Fibonacci ratios
 FIB_RATIOS = [0.236, 0.382, 0.5, 0.618, 0.786]
@@ -75,38 +77,59 @@ def find_fib_retracement(
     lookback: int = 50,
 ) -> Optional[FibRetracement]:
     """
-    Find Fibonacci retracement from recent swing.
-    
+    Find Fibonacci retracement anchored on confirmed swing points.
+
+    Anchoring follows the methodology: "Analyse the swing points & draw
+    Fibonacci retracement" (p.9). The previous implementation anchored on the
+    window extremes (highest high / lowest low of the lookback window), which
+    are not swing points at all and slide as the window advances.
+
+    The TypeScript engine previously looked only at the last 4 swings and
+    returned ``None`` when they did not contain both a high and a low. That
+    silently dropped the Fibonacci confirmation factor depending on the shape
+    of the recent swings, so both engines now scan the swings from most recent
+    to oldest and take the first HIGH and the first LOW found.
+
     Args:
         df: OHLCV DataFrame
-        lookback: Number of bars to look back for swing
-    
+        lookback: Number of bars to look back for the swing search
+
     Returns:
-        FibRetracement object if found, None otherwise
+        FibRetracement object if a usable swing pair exists, None otherwise
     """
     if len(df) < lookback:
         lookback = len(df)
-    
+
     data = df.iloc[-lookback:]
-    
-    # Find swing high and low
-    high_idx = data['high'].idxmax()
-    low_idx = data['low'].idxmin()
-    
-    swing_high = data['high'].max()
-    swing_low = data['low'].min()
-    
-    # Determine direction based on which came first
-    if data.index.get_loc(low_idx) < data.index.get_loc(high_idx):
-        direction = 'UP'  # Move was up, we're looking for pullback
-    else:
-        direction = 'DOWN'  # Move was down, we're looking for bounce
-    
-    levels = calculate_fib_levels(swing_high, swing_low, direction)
-    
+    if len(data) == 0:
+        return None
+
+    # Confirmed swing points inside the window.
+    swing_highs, swing_lows = find_swing_points(data, 5, 3)
+
+    last_high: Optional[Tuple[int, float]] = None
+    last_low: Optional[Tuple[int, float]] = None
+
+    # Scan from most recent to oldest, taking the first high and first low.
+    if swing_highs:
+        last_high = swing_highs[-1]
+    if swing_lows:
+        last_low = swing_lows[-1]
+
+    if last_high is None or last_low is None:
+        return None
+
+    high_idx, high_price = last_high
+    low_idx, low_price = last_low
+
+    # Direction is decided by which of the two extremes came first.
+    direction = 'UP' if low_idx < high_idx else 'DOWN'
+
+    levels = calculate_fib_levels(high_price, low_price, direction)
+
     return FibRetracement(
-        swing_high=swing_high,
-        swing_low=swing_low,
+        swing_high=high_price,
+        swing_low=low_price,
         direction=direction,
         levels=levels,
     )

@@ -3,7 +3,7 @@ import { PatternEngine } from './PatternEngine';
 import { PaperTradingEngine } from './PaperTradingEngine';
 import { CSVLoader } from '../data/CSVLoader';
 import { DEFAULT_CONFIG } from '../config/default';
-import { CandleResampler, getHigherTimeframe, getTimeframeMinutes } from './CandleResampler';
+import { CandleResampler, NseCandleResampler, getHigherTimeframe, getTimeframeMinutes } from './CandleResampler';
 
 /**
  * Monitor configuration
@@ -44,11 +44,24 @@ export class LiveMonitor {
   }
   
   /**
+   * Get all loaded candles (for charting)
+   */
+  getAllCandles(): Candle[] {
+    return this.allCandles;
+  }
+
+  /**
    * Load historical data from CSV
    */
-  loadFromCSV(filePath: string): number {
+  loadFromCSV(filePath: string, startDate?: number, endDate?: number): number {
     const loader = new CSVLoader();
-    this.allCandles = loader.loadFromFile(filePath);
+    this.allCandles = loader.loadFromFile(filePath, startDate, endDate);
+    
+    // Handle empty data case
+    if (this.allCandles.length === 0) {
+      console.log('[LiveMonitor] No candles loaded (empty date range or no data in range)');
+      return 0;
+    }
     
     // Infer timeframe if not set
     if (!this.config.timeframe) {
@@ -75,44 +88,90 @@ export class LiveMonitor {
   }
   
   /**
+   * Check if a symbol is an NSE symbol
+   * NSE symbols in this codebase use simple names like 'RELIANCE', 'NIFTY50', etc.
+   * We check against the known NSE instrument keys from UpstoxFeed
+   */
+  private isNseSymbol(symbol: string): boolean {
+    const nseSymbols = [
+      'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN',
+      'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'HINDUNILVR', 'AXISBANK',
+      'MARUTI', 'BAJFINANCE', 'TATAMOTORS', 'NIFTY50', 'NIFTY', 'BANKNIFTY',
+      'NIFTYIT', 'NIFTYMIDCAP', 'FINNIFTY'
+    ];
+    return nseSymbols.includes(symbol.toUpperCase());
+  }
+
+  /**
    * Process a single candle
+   *
+   * Execution semantics (see research-py/docs/EXECUTION_SEMANTICS.md):
+   * the strategy decides on CLOSED candles only. The candle currently being
+   * processed is the forming bar, so it must not be visible to the pattern
+   * engine. The forming candle is used for execution (stop / target checks
+   * against the open book) but never for detection.
    */
   processCandle(candle: Candle): void {
-    this.addCandle(candle);
-    
+    // The buffer holds only CLOSED candles. The forming candle is not added.
+    const closedCandles = this.candles;
+
     // Check minimum candles for pattern detection
     const minRequired = this.patternEngine.getMinRequiredCandles();
-    if (this.candles.length < minRequired) {
+    if (closedCandles.length < minRequired) {
+      // Still manage any open trades against the forming candle.
+      this.paperTrading.updateTrades(candle);
+      this.addCandle(candle);
       return;
     }
-    
-    // Update existing trades
-    this.paperTrading.updateTrades(candle);
-    
+
     // Generate HTF candles for Multi-Timeframe Analysis (CRITICAL for trend filtering)
+    // Built from closed candles only, so the HTF filter never sees a forming
+    // higher-timeframe bar.
     const htfTimeframe = getHigherTimeframe(this.config.timeframe);
-    const htfCandles = CandleResampler.resampleByTimeframe(
-      this.candles,
-      this.config.timeframe,
-      htfTimeframe
-    );
+    let htfCandles: Candle[];
     
+    // Use NSE-specific session-aware resampler for 30m → 1h on NSE symbols
+    const isNse30mTo1h = this.config.timeframe === '30m' && htfTimeframe === '1h' && this.isNseSymbol(this.config.symbol);
+    if (isNse30mTo1h) {
+      htfCandles = NseCandleResampler.resample30mTo1hSessionAligned(closedCandles);
+    } else {
+      htfCandles = CandleResampler.resampleByTimeframe(
+        closedCandles,
+        this.config.timeframe,
+        htfTimeframe
+      );
+    }
+
     // Need minimum HTF candles for analysis
     const minHTFCandles = 50;
     const validHTFCandles = htfCandles.length >= minHTFCandles ? htfCandles : undefined;
-    
-    // Detect new signals (now with HTF data for trend filtering!)
+
+    // Detect new signals using CLOSED candles only. A signal emitted here is
+    // actionable from the forming candle onwards.
     const signals = this.patternEngine.detectSignals(
-      this.candles,
+      closedCandles,
       this.config.symbol,
       this.config.timeframe,
       validHTFCandles
     );
-    
+
     // Process signals
     for (const signal of signals) {
       this.paperTrading.processSignal(signal);
     }
+
+    // Execute against the forming candle. This must happen AFTER detection so
+    // a pending order just created from the closed candles is allowed to fill
+    // on THIS bar's range, matching the research engine's per-bar order
+    // (engine.py: detect -> execute pending -> update positions) and the
+    // trade-parity harness. A position filled on this candle is not also
+    // exit-checked on it: updateTrades iterates each trade once and the
+    // PENDING->OPEN transition returns without an exit.
+    this.paperTrading.updateTrades(candle);
+
+    // The candle has now closed: it becomes available to the strategy on the
+    // NEXT call.
+    this.addCandle(candle);
   }
   
   /**
@@ -124,11 +183,18 @@ export class LiveMonitor {
       return;
     }
     
+    const minRequired = this.patternEngine.getMinRequiredCandles();
+    if (this.allCandles.length < minRequired) {
+      console.log(`[LiveMonitor] Insufficient data for pattern detection. Need ${minRequired} candles, have ${this.allCandles.length}.`);
+      this.currentIndex = this.allCandles.length;
+      this.isRunning = false;
+      return;
+    }
+    
     this.currentIndex = startIndex || 0;
     this.candles = [];
     this.isRunning = true;
     
-    const minRequired = this.patternEngine.getMinRequiredCandles();
     console.log(`[LiveMonitor] Starting simulation from index ${this.currentIndex}`);
     console.log(`[LiveMonitor] Minimum candles required: ${minRequired}`);
     

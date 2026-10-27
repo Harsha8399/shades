@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, LineChart, Layers, Activity, Brain, Play } from 'lucide-react';
+import { LayoutDashboard, LineChart, Layers, Activity, Brain, Play, BarChart2, Wifi, History } from 'lucide-react';
 import clsx from 'clsx';
 import { NotificationBanner } from './NotificationBanner';
 
@@ -10,6 +10,9 @@ interface LayoutProps {
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Overview' },
+  { path: '/simulation', icon: BarChart2, label: 'Simulation' },
+  { path: '/replay', icon: History, label: 'Replay' },
+  { path: '/live', icon: Wifi, label: 'Live Scanner' },
   { path: '/trades', icon: Activity, label: 'Trades' },
   { path: '/patterns', icon: Layers, label: 'Patterns' },
   { path: '/paper-trading', icon: Play, label: 'Paper Trading' },

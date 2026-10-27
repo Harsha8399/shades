@@ -1,4 +1,5 @@
 import { Pattern, PatternConfig, Candle, MarketContext, Signal, Direction, ValidationResult } from '../types';
+import { DecisionTrace, PredictionSnapshot } from '../types/decision';
 
 /**
  * Base class for patterns with common functionality
@@ -10,6 +11,17 @@ export abstract class BasePattern implements Pattern {
   abstract readonly version: string;
   
   config: PatternConfig;
+  
+  /**
+   * Decision trace from the most recent detectSignal() call.
+   * Patterns that support tracing set this on every evaluation (signal or not).
+   */
+  lastTrace: DecisionTrace | null = null;
+  
+  /**
+   * Evidence snapshot from the most recent signal produced by this pattern.
+   */
+  lastSnapshot: PredictionSnapshot | null = null;
   
   constructor(config?: Partial<PatternConfig>) {
     this.config = {
@@ -23,8 +35,9 @@ export abstract class BasePattern implements Pattern {
   
   /**
    * Must be implemented by subclasses
+   * @param absoluteCandleIndex - Optional absolute index in the full replay dataset
    */
-  abstract detectSignal(candles: Candle[], context: MarketContext): Signal | null;
+  abstract detectSignal(candles: Candle[], context: MarketContext, absoluteCandleIndex?: number): Signal | null;
   
   /**
    * Calculate stop-loss - can be overridden

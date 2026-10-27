@@ -1,0 +1,1850 @@
+{
+  "$schema_version": "1.0.0",
+  "spec_id": "shades.confluence-zone",
+  "spec_version": "2.0.0",
+  "title": "Confluence Zone strategy specification",
+  "description": "Canonical, provenance-tagged specification of every strategy parameter and behavioural rule consumed by the Python research engine (research-py) and the TypeScript production engine (app-ts). Both engines are validated against this file by automated tests; neither engine owns an independent copy of these values.",
+  "authority": {
+    "primary_source": "data/The Trader's Playbook_TSOT.pdf",
+    "primary_source_title": "The Shades of Trades - The Trader's Playbook, Apoorva Sharma",
+    "primary_source_pages": 20,
+    "derived_docs_are_not_authoritative": [
+      "docs/techniques/01-trendlines.md",
+      "docs/techniques/02-support-resistance.md",
+      "docs/techniques/03-fibonacci-retracement.md",
+      "docs/techniques/04-confluence-liquidity.md",
+      "docs/techniques/05-entry-models-trade-management.md",
+      "docs/techniques/06-multi-timeframe.md",
+      "docs/techniques/07-psychology-risk.md"
+    ],
+    "note": "Where docs/techniques/*.md disagrees with the PDF, the PDF wins. Several numbers in those files (R:R 1.5, fixed-fractional 1-2% sizing, daily/weekly loss limits, 0.3% zone width, tier scoring, timeframe weights) have NO basis in the PDF."
+  },
+  "provenance_values": {
+    "book": "The rule or value is stated in the source PDF. Must carry a page citation and a supporting passage.",
+    "inferred": "The PDF requires the concept but does not quantify it. An explicit, documented interpretation is supplied.",
+    "invented": "The PDF is silent. The value is an engineering decision with no methodological basis. Every invented value is an overfitting candidate."
+  },
+  "conventions": {
+    "numeric_tolerance": "Numeric comparisons between engines use 1e-9 for prices and 1e-6 for ratios, unless a rule declares its own tolerance.",
+    "atr_tolerance_units": "All tolerances expressed as an ATR multiple are volatility-adaptive and scale-free, so the same numbers apply to NSE equities, MCX commodities and crypto.",
+    "price_scale": "No parameter is expressed as a percentage of price unless the PDF says so. Percentage-of-price tolerances behave differently at every price scale and are therefore avoided."
+  },
+  "parameters": [
+    {
+      "id": "SWING_LEFT_BARS",
+      "name": "Swing left confirmation bars",
+      "purpose": "Bars required to the left of a candidate swing point for it to qualify as a swing.",
+      "value": 3,
+      "type": "integer",
+      "range": [
+        1,
+        50
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF requires a swing to be 'confirmed' by surrounding candles but never states how many. 3 is the conventional fractal setting and matches the TypeScript engine's pre-existing value.",
+      "status": "OPEN - candidate for the sensitivity analysis in a later stage. Not to be changed to improve results.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/trendlines.py::find_swing_points",
+        "research-py/src/indicators/support_resistance.py::find_sr_zones",
+        "research-py/src/indicators/fibonacci.py::find_fib_retracement",
+        "app-ts/src/indicators/swingPoints.ts::findSwingPoints"
+      ],
+      "tests": [
+        "test_indicators.py::TestSwingPoints"
+      ]
+    },
+    {
+      "id": "SWING_RIGHT_BARS",
+      "name": "Swing right confirmation bars",
+      "purpose": "Bars required to the right of a candidate swing point. These are the CAUSALITY DELAY: a swing at index k is not knowable until bar k+SWING_RIGHT_BARS.",
+      "value": 3,
+      "type": "integer",
+      "range": [
+        1,
+        50
+      ],
+      "provenance": "inferred",
+      "pdf_page": 6,
+      "pdf_passage": "Trendlines must preferably be drawn keeping in view, the wick of the candle for maximum structure & precision in the process. In case the wick is missing, the body of the candle can be used.",
+      "rationale": "A fractal swing needs surrounding candles on both sides to be distinguishable from an in-progress move. The PDF requires a swing to be a real structural pivot (it describes a swing low forming only after price breaks the recent high, p.14) but never quantifies the width. The delay is NOT removable: setting it to 0 would change what a 'swing' means.",
+      "status": "OPEN - governs the strategy's information latency.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/trendlines.py::find_swing_points",
+        "research-py/src/indicators/fibonacci.py::find_fib_retracement",
+        "app-ts/src/indicators/swingPoints.ts::findSwingPoints"
+      ],
+      "tests": [
+        "test_indicators.py::TestSwingPoints",
+        "test_execution_semantics.py::TestSwingConfirmation"
+      ]
+    },
+    {
+      "id": "FIB_SWING_LEFT_BARS",
+      "name": "Fibonacci swing left bars",
+      "purpose": "Left context used when detecting the swing pair that anchors a Fibonacci retracement.",
+      "value": 5,
+      "type": "integer",
+      "range": [
+        1,
+        50
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF requires Fibonacci to be drawn between swing points but does not define the swing width for this purpose. A wider left context (5 vs 3) is used for Fibonacci because a retracement needs a dominant, unambiguous leg rather than a minor fractal.",
+      "status": "OPEN - invented, distinct from SWING_LEFT_BARS, and therefore a separate overfitting candidate.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/fibonacci.py::find_fib_retracement",
+        "app-ts/src/indicators/fibonacci.ts::findFibRetracement"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestFibonacciAnchoring"
+      ]
+    },
+    {
+      "id": "FIB_SWING_RIGHT_BARS",
+      "name": "Fibonacci swing right bars",
+      "purpose": "Right-side confirmation for Fibonacci anchor swings.",
+      "value": 3,
+      "type": "integer",
+      "range": [
+        1,
+        50
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "Same causality argument as SWING_RIGHT_BARS: the anchor must be a confirmed swing, not a forming one.",
+      "status": "OPEN",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/fibonacci.py::find_fib_retracement",
+        "app-ts/src/indicators/fibonacci.ts::findFibRetracement"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestFibonacciAnchoring"
+      ]
+    },
+    {
+      "id": "FIB_RATIOS",
+      "name": "Fibonacci retracement ratios",
+      "purpose": "The retracement levels the strategy considers. These are the levels checked for confluence.",
+      "value": [
+        0.236,
+        0.382,
+        0.5,
+        0.618,
+        0.786
+      ],
+      "type": "number[]",
+      "range": "each in (0, 1)",
+      "provenance": "book",
+      "pdf_page": 10,
+      "pdf_passage": "Fibonacci levels of 23.6%, 38.2%, 50%, 61.8%, 78.6% are considered the most crucial retracement zones.",
+      "rationale": "Stated verbatim in the PDF. All five levels are computed and all five are eligible to form a confluence factor.",
+      "status": "LOCKED - book-derived, not to be changed.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/fibonacci.py::calculate_fib_levels",
+        "app-ts/src/indicators/fibonacci.ts::calculateFibLevels"
+      ],
+      "tests": [
+        "test_indicators.py::TestFibonacci",
+        "test_stage1_calculations.py::TestFibonacciAnchoring"
+      ]
+    },
+    {
+      "id": "FIB_CONFLUENCE_LEVELS",
+      "name": "Fibonacci levels eligible for confluence",
+      "purpose": "The subset of FIB_RATIOS that may act as a confluence factor. The pattern configuration exposes a 'fibLevels' field intended for this, but NEITHER engine currently applies it: the confluence check matches against every computed level.",
+      "value": [
+        0.5,
+        0.618,
+        0.786
+      ],
+      "type": "number[]",
+      "range": "subset of FIB_RATIOS",
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF says the importance of any single Fibonacci level 'varies with the script you are analysing' (p.10) and that crude oil in bullish momentum can retrace to 78.6%. It does NOT say which levels are used for a given market. A three-level subset was configured in both engines but is DEAD CONFIGURATION: the confluence check uses all five levels. This parameter records the intent, and the DEAD_CONFIGURATION note below records the fact.",
+      "status": "OPEN - DEAD CONFIGURATION. Both engines expose this value in their pattern config but neither applies it; a confluence factor can therefore form on 23.6% or 38.2% as well. Fixing it is a BEHAVIOUR CHANGE and is deliberately NOT done in Stage 2. It is a Stage 3/5 candidate because instrument-specific level selection is a per-market concern.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal (config only - NOT applied)",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::findConfluence (config only - NOT applied)"
+      ],
+      "tests": []
+    },
+    {
+      "id": "FIB_LOOKBACK",
+      "name": "Fibonacci lookback window",
+      "purpose": "Number of bars searched for the swing pair that anchors the retracement.",
+      "value": 50,
+      "type": "integer",
+      "range": [
+        10,
+        500
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF states the fib must be drawn on swing points and in the direction of the BROADER trend (p.10), but gives no window. 50 bars is the pre-existing value in both engines.",
+      "status": "OPEN - known weakness: on the shared 15m fixture the last-50 window contains only ONE swing high and NO swing low, so no Fibonacci factor can be produced there. Stage 3 must re-examine this window against the book's 'broader trend' requirement.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::findConfluence"
+      ],
+      "tests": [
+        "test_stage1_signals.py::TestStage1SignalParity"
+      ]
+    },
+    {
+      "id": "FIB_ANCHOR",
+      "name": "Fibonacci anchoring method",
+      "purpose": "How the retracement's high and low are selected.",
+      "value": "confirmed_swing_points_newest_first",
+      "type": "enum",
+      "range": [
+        "confirmed_swing_points_newest_first",
+        "window_extremes"
+      ],
+      "provenance": "book",
+      "pdf_page": 9,
+      "pdf_passage": "Analyse the general overview of price movement & figure out the trend. Analyse the swing points & draw Fibonacci retracement",
+      "rationale": "The PDF explicitly says to draw the retracement on the swing points. 'window_extremes' (the highest high and lowest low of a window) are not swing points and slide as the window advances; it was the pre-Stage-1 Python behaviour and was replaced. The selection scans newest-to-oldest for the first confirmed HIGH and the first confirmed LOW, so the function never silently returns null merely because the most recent four swings happened to be all one type.",
+      "status": "LOCKED - book-derived.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/indicators/fibonacci.py::find_fib_retracement",
+        "app-ts/src/indicators/fibonacci.ts::findFibRetracement"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestFibonacciAnchoring",
+        "test_stage1_parity.py::TestStage1Parity"
+      ]
+    },
+    {
+      "id": "ATR_PERIOD",
+      "name": "ATR period",
+      "purpose": "Lookback period for the Average True Range used by every ATR-scaled tolerance.",
+      "value": 14,
+      "type": "integer",
+      "range": [
+        2,
+        100
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "Wilder's original ATR used 14, and it is the near-universal convention. The PDF is silent.",
+      "status": "OPEN - conventional, low risk, but still an invented value.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/support_resistance.py::calculate_atr",
+        "app-ts/src/indicators/atr.ts::calculateATR"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestWilderATR"
+      ]
+    },
+    {
+      "id": "ATR_METHOD",
+      "name": "ATR calculation method",
+      "purpose": "The exact ATR algorithm, so that both engines produce bit-identical tolerances.",
+      "value": "wilder_excluding_tr0",
+      "type": "enum",
+      "range": [
+        "wilder_excluding_tr0"
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF never mentions ATR. The method is chosen to reproduce the `technicalindicators` library exactly, because the repository's own ARCHITECTURE.md mandates library-standard indicators. The convention is: TR[0] = high-low (excluded from the seed); seed = mean(TR[1..period]); then Wilder smoothing ((atr*(period-1)+tr)/period).",
+      "status": "LOCKED - must match the library bit for bit; a test asserts equality with `technicalindicators`.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/indicators/support_resistance.py::calculate_atr",
+        "app-ts/src/indicators/atr.ts::calculateATR"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestWilderATR",
+        "stage1-calculations.test.ts::D1: ATR uses Wilder smoothing"
+      ]
+    },
+    {
+      "id": "SR_ZONE_LOOKBACK",
+      "name": "Support/resistance zone lookback",
+      "purpose": "Number of bars searched for swing points when building S/R zones.",
+      "value": 100,
+      "type": "integer",
+      "range": [
+        20,
+        1000
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF says levels are drawn from touchpoints and that daily/weekly timeframes are used for the important ones, but gives no bar count. 100 is the pre-existing value in both engines.",
+      "status": "OPEN - overfitting candidate.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::findConfluence"
+      ],
+      "tests": [
+        "test_stage1_signals.py::TestStage1SignalParity"
+      ]
+    },
+    {
+      "id": "SR_MIN_TOUCHES",
+      "name": "Minimum touches for an S/R zone",
+      "purpose": "Number of clustered swing points required for a level to qualify as a tradable zone.",
+      "value": 2,
+      "type": "integer",
+      "range": [
+        1,
+        10
+      ],
+      "provenance": "inferred",
+      "pdf_page": 8,
+      "pdf_passage": "Levels can be drawn using one or more touchpoints. The greater number of touchpoints, the more accurate the level will be, & the greater will be the chances of it being respected by price.",
+      "rationale": "The PDF allows a level with ONE touchpoint, so 2 is a deliberate strengthening for tradability, not a book requirement. The book ranks levels by touchpoint count rather than mandating a threshold.",
+      "status": "OPEN - stricter than the book; documented as an inference.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/support_resistance.py::find_sr_zones",
+        "app-ts/src/indicators/supportResistance.ts::findSRZones"
+      ],
+      "tests": [
+        "test_indicators.py::TestSupportResistance",
+        "test_stage1_calculations.py::TestSRZoneATRReuse"
+      ]
+    },
+    {
+      "id": "SR_ZONE_TOLERANCE_ATR",
+      "name": "S/R zone clustering tolerance",
+      "purpose": "Width of the band within which swing points are merged into one zone.",
+      "value": 0.5,
+      "type": "number",
+      "range": [
+        0.05,
+        5.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF says to draw a rectangle/zone and warns against levels 'too close to each other' (p.9) but gives no width. Expressed as an ATR multiple so it adapts to volatility and is scale-free.",
+      "status": "OPEN - overfitting candidate.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::findConfluence"
+      ],
+      "tests": [
+        "test_stage1_signals.py::TestStage1SignalParity"
+      ]
+    },
+    {
+      "id": "SR_ANCHOR_METHOD",
+      "name": "S/R zone anchor method",
+      "purpose": "Which part of the candle defines the level.",
+      "value": "wick",
+      "type": "enum",
+      "range": [
+        "wick",
+        "body"
+      ],
+      "provenance": "book",
+      "pdf_page": 8,
+      "pdf_passage": "Levels can be drawn by connecting, end of the wicks or end of the body of the candles.",
+      "rationale": "The PDF permits either, provided the method is consistent. 'wick' is chosen because p.6 states the same preference for trendlines ('keeping in view, the wick of the candle'). A single method is used for both levels and trendlines, satisfying the consistency requirement.",
+      "status": "LOCKED - book-derived.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/indicators/support_resistance.py::find_sr_zones",
+        "research-py/src/indicators/trendlines.py::find_swing_points"
+      ],
+      "tests": [
+        "test_indicators.py::TestSupportResistance"
+      ]
+    },
+    {
+      "id": "TRENDLINE_MIN_TOUCHES",
+      "name": "Minimum touches for a trendline",
+      "purpose": "Number of swing points that must lie on a candidate trendline.",
+      "value": 2,
+      "type": "integer",
+      "range": [
+        2,
+        10
+      ],
+      "provenance": "book",
+      "pdf_page": 6,
+      "pdf_passage": "At least two touchpoints are required to draw a trendline.",
+      "rationale": "Stated verbatim in the PDF.",
+      "status": "LOCKED - book-derived.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/trendlines.py::find_trendlines",
+        "app-ts/src/indicators/trendlines.ts::findTrendlines"
+      ],
+      "tests": [
+        "test_indicators.py::TestTrendlines"
+      ]
+    },
+    {
+      "id": "TRENDLINE_SELECTION",
+      "name": "Trendline selection for the confluence check",
+      "purpose": "Which of the detected trendlines are tested when checking whether price is currently on a trendline.",
+      "value": "all_detected_trendlines",
+      "type": "enum",
+      "range": [
+        "all_detected_trendlines",
+        "strongest_n_only"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 2,
+      "pdf_passage": "The more the touchpoints, the more accurate the trendline will be.",
+      "rationale": "The book ranks trendlines by touchpoint count but does not say that only the best-ranked line may be consulted. A price that is currently sitting on a line is respecting that line, whatever the rank of other lines it also happens to touch. The trade-parity fixture in Stage 2 exposed that the research engine consulted only the three strongest lines while the production engine consulted all of them, so the two engines disagreed on whether a trendline confirmation was present.",
+      "status": "LOCKED - the research engine was aligned to the production engine's rule in Stage 2, so both now consult every detected trendline. Recorded as DIV-13 with resolution_stage 2 because it was resolved within this stage.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::findConfluence"
+      ],
+      "tests": [
+        "test_stage1_signals.py::TestStage1SignalParity",
+        "stage1-signals.test.ts::Stage 1 parity: per-bar confluence signals"
+      ]
+    },
+    {
+      "id": "TRENDLINE_TOLERANCE_ATR",
+      "name": "Trendline touch tolerance",
+      "purpose": "Width of the band within which a swing point counts as touching a trendline.",
+      "value": 0.3,
+      "type": "number",
+      "range": [
+        0.05,
+        5.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The PDF says more touchpoints make a trendline more accurate but gives no width. Expressed as an ATR multiple. A percentage-of-price tolerance was the pre-Stage-1 Python behaviour and was replaced precisely because it is scale-dependent: 2% of a 1000-point index is a 20-point band, 2% of a 50-point stock is a 1-point band.",
+      "status": "OPEN - overfitting candidate.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/trendlines.py::find_trendlines",
+        "app-ts/src/indicators/trendlines.ts::findTrendlines"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestTrendlineTolerance"
+      ]
+    },
+    {
+      "id": "TRENDLINE_ORIGIN_RULE",
+      "name": "Trendline origin rule",
+      "purpose": "Whether a trendline must originate where the trend begins.",
+      "value": "not_enforced",
+      "type": "enum",
+      "range": [
+        "not_enforced",
+        "enforced"
+      ],
+      "provenance": "book",
+      "pdf_page": 7,
+      "pdf_passage": "A trendline is a valid trendline when it originates from where the trend begins. A trendline drawn from a random point in the middle might provide inaccurate results & subpar reliability.",
+      "rationale": "The book requires this. The implementation currently accepts any pair of swing lows as a line, so a mid-trend line is permitted. This is a KNOWN GAP, not a decision.",
+      "status": "OPEN - NOT IMPLEMENTED. Blocking for Stage 3: the book's stop-loss rules reference a 'broader ongoing trendline', whose validity depends on this rule.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/indicators/trendlines.py::find_trendlines",
+        "app-ts/src/indicators/trendlines.ts::findTrendlines"
+      ],
+      "tests": []
+    },
+    {
+      "id": "TRENDLINE_BREAK_DETECTION",
+      "name": "Trendline break detection",
+      "purpose": "How a break of the immediate trendline is detected. Required by Entry Model 2.",
+      "value": "not_implemented",
+      "type": "enum",
+      "range": [
+        "not_implemented",
+        "touch_beyond_line",
+        "close_beyond_line"
+      ],
+      "provenance": "book",
+      "pdf_page": 17,
+      "pdf_passage": "entry must be planned as soon as the trendline gets broken & there is no need to wait for any kind of candle closing confirmation, at-least this is how I use it",
+      "rationale": "Entry Model 2 is defined by a trendline break. Neither engine implements book-faithful break detection; the shipped 'Entry Model 2' is a rejection-candle trigger, which the book does not describe. When this IS implemented (Stage 4), the book-derived rule is touch_beyond_line: price reaches or crosses the line. close_beyond_line is EXPLICITLY REJECTED by the same p.17 sentence that rejects candle-close confirmation. A prior draft of the Stage 4 plan that required 'price closes through the trendline' contradicted the book and has been corrected. Distinct from ORDER_FILL_CONDITION (DIV-11), which governs how a resting order fills once a signal exists.",
+      "status": "OPEN - NOT IMPLEMENTED. Blocking for Stage 4. Book rule for the eventual implementation is touch_beyond_line, not close_beyond_line.",
+      "configurable": false,
+      "consumers": [],
+      "tests": []
+    },
+    {
+      "id": "MIN_CONFLUENCE_FACTORS",
+      "name": "Minimum confluence confirmations",
+      "purpose": "How many distinct confluence factors must be present for a signal.",
+      "value": 2,
+      "type": "integer",
+      "range": [
+        1,
+        3
+      ],
+      "provenance": "book",
+      "pdf_page": 16,
+      "pdf_passage": "high liquidity zone needs to be spotted which as we discussed before requires spotting at-least 3 confirmations",
+      "rationale": "The book requires AT LEAST THREE. The implementation uses 2, which directly contradicts the book and is the reason a bare Level+Fib pairing can currently trigger a signal - precisely the case the book says must be upgraded to Entry Model 2 (p.18).",
+      "status": "OPEN - CONTRADICTS THE BOOK. Blocking for Stage 5. Changing the number alone is not sufficient: see CONFLUENCE_FACTOR_INDEPENDENCE.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::findConfluence"
+      ],
+      "tests": []
+    },
+    {
+      "id": "CONFLUENCE_FACTORS",
+      "name": "Confluence factor set",
+      "purpose": "The price-based elements that can constitute a confirmation.",
+      "value": [
+        "sr_zone",
+        "fibonacci_level",
+        "trendline"
+      ],
+      "type": "string[]",
+      "range": "subset of the listed factors",
+      "provenance": "book",
+      "pdf_page": 11,
+      "pdf_passage": "Examples of confluence: 1. Level + Trendline + Fibonacci retracement 2. Level + trendlines",
+      "rationale": "These are exactly the three elements the book names. A fourth element (previous swing point) appears only in the repo-authored docs/techniques/04, not in the PDF, and is therefore not included.",
+      "status": "LOCKED - book-derived.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::findConfluence"
+      ],
+      "tests": [
+        "test_stage1_signals.py::TestStage1SignalParity"
+      ]
+    },
+    {
+      "id": "CONFLUENCE_FACTOR_INDEPENDENCE",
+      "name": "Confluence factor independence",
+      "purpose": "Whether two factors derived from the same structural point count as two confirmations.",
+      "value": "not_enforced",
+      "type": "enum",
+      "range": [
+        "not_enforced",
+        "distinct_source_structure"
+      ],
+      "provenance": "book",
+      "pdf_page": 11,
+      "pdf_passage": "You can spot liquidity on the chart by using multiple confirmations of price action (also called confluence).",
+      "rationale": "The book speaks of multiple CONFIRMATIONS, which implies independent evidence. Currently a single swing low can produce both an S/R zone and a trendline and count as two factors, which makes the effective filter weaker than its nominal count. This is an AMBIGUITY in the book that must be resolved explicitly before MIN_CONFLUENCE_FACTORS can be raised to 3.",
+      "status": "OPEN - NOT IMPLEMENTED. Blocking for Stage 5.",
+      "configurable": false,
+      "consumers": [],
+      "tests": []
+    },
+    {
+      "id": "ENTRY_MODEL",
+      "name": "Entry model",
+      "purpose": "Which of the book's entry models the strategy implements.",
+      "value": "rejection_candle_at_confluence",
+      "type": "enum",
+      "range": [
+        "rejection_candle_at_confluence",
+        "em1_direct",
+        "em2_trendline_break"
+      ],
+      "provenance": "invented",
+      "pdf_page": 16,
+      "pdf_passage": "Entry Model 1- Plan a direct entry. As soon as the price reaches high liquidity zone, one can directly enter into the trade",
+      "rationale": "NEITHER of the book's two models. The book's EM1 requires NO candle confirmation and EM2 requires a TRENDLINE BREAK with no candle-close wait. The shipped model requires a rejection candle (wick into the zone, close back outside, wick at least MIN_REJECTION_WICK_RATIO times the body) - a trigger the author never describes. The book also explicitly says a mere retest is not enough confirmation (p.16), so the rejection candle is not a neutral placeholder; it is a third, undocumented rule.",
+      "status": "OPEN - CONTRADICTS THE BOOK. Blocking for Stage 4.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::detect_signal",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::detectSignal"
+      ],
+      "tests": []
+    },
+    {
+      "id": "MIN_REJECTION_WICK_RATIO",
+      "name": "Minimum rejection wick-to-body ratio",
+      "purpose": "How large the rejection wick must be relative to the candle body for the current model's entry trigger.",
+      "value": 2.0,
+      "type": "number",
+      "range": [
+        0.0,
+        10.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book never defines a rejection candle numerically. It only requires 'at-least 3 confirmations' and says a mere retest is insufficient (p.16).",
+      "status": "OPEN - invented, and only meaningful while ENTRY_MODEL is 'rejection_candle_at_confluence'. Becomes inert under the book's models.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::_is_rejection_candle",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::detectRejectionCandle"
+      ],
+      "tests": []
+    },
+    {
+      "id": "STOP_LOSS_RULE",
+      "name": "Stop-loss rule",
+      "purpose": "How the stop-loss price is determined.",
+      "value": "recent_confirmed_swing_plus_10pct_buffer",
+      "type": "enum",
+      "range": [
+        "recent_confirmed_swing_plus_10pct_buffer",
+        "em1_next_retracement",
+        "em2a_next_fib_plus_broader_trendline",
+        "em2b_next_swing_plus_broader_trendline"
+      ],
+      "provenance": "invented",
+      "pdf_page": 16,
+      "pdf_passage": "Stoploss in this situation can be put slightly above the next retracement whilst keeping a suitable distance away from the trendline as well.",
+      "rationale": "NONE of the book's three methods. The book specifies (p.16-17): EM1 - beyond the next retracement with distance from the trendline; EM2 Method A - beyond the next fib level AND the broader ongoing trendline; EM2 Method B - beyond the latest swing high/low AND the broader trendline. The shipped rule is a confirmed swing plus an invented 10% buffer.",
+      "status": "OPEN - Stage 3 has DEFINED the three book rules (see NEXT_RETRACEMENT_SELECTION, NEXT_FIB_LEVEL_SELECTION, EM2B_SWING_SELECTION, STOP_LEVEL_COMBINATION, STOP_BUFFER_ATR) but the production stop-placement logic has NOT been changed. The shipped value 'recent_confirmed_swing_plus_10pct_buffer' still matches NONE of the book's three methods. Implementation is gated on approval of the Stage 3 decisions.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestPatternStopLossAndTarget"
+      ]
+    },
+    {
+      "id": "STOP_LOSS_BUFFER",
+      "name": "Stop-loss buffer",
+      "purpose": "Additional distance beyond the swing point, as a fraction of the entry-to-swing distance.",
+      "value": 0.1,
+      "type": "number",
+      "range": [
+        0.0,
+        1.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book says 'slightly above the next retracement' and 'keeping a suitable distance away from the trendline' without quantifying either. 10% of the entry-to-swing distance is a placeholder. Because it scales every stop distance, it scales every position size and every R-multiple.",
+      "status": "SUPERSEDED IN STAGE 3 by STOP_BUFFER_ATR. This 10%-of-distance buffer was invented and scale-dependent. It is retained here only so that the change of the stop rule is traceable; it must not be used once STOP_BUFFER_ATR is implemented.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "NEXT_RETRACEMENT_SELECTION",
+      "name": "Next retracement selection (Entry Model 1)",
+      "purpose": "How 'the next retracement' is chosen for an Entry Model 1 stop-loss.",
+      "value": "next_fib_retracement_level_above_entry",
+      "type": "enum",
+      "range": [
+        "next_fib_retracement_level_above_entry",
+        "nearest_confirmed_swing_extreme",
+        "percentage_pullback_of_entry_leg"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 16,
+      "pdf_passage": "Stoploss in this situation can be put slightly above the next retracement whilst keeping a suitable distance away from the trendline as well.",
+      "rationale": "AMB-03 RESOLVED IN STAGE 3. The book says 'the next retracement' without defining it. Three candidate meanings were considered: (A) the next Fibonacci retracement level above the entry price, (B) the nearest confirmed swing extreme beyond the entry, and (C) a percentage pullback of the entry leg. The p.16 worked example discriminates between them. The chart's liquidity zone is explicitly labelled as the 'Fibonacci retracement 50% level', the entry is therefore at the 50% level (30.567), and the drawn stop is at 31.043 - just above the 61.80% level (30.985) and far below the 78.60% level (31.580). Option (B) is contradicted: the nearest confirmed swing high above that entry is in the 31.5-32.3 region, not 31.04, so a swing-anchored stop would sit materially higher than the one the author drew. Option (C) has no supporting quantity in the chart. Option (A) reproduces the author's stop to within 0.06 price units. The p.16 and p.17 charts share ONE Fibonacci structure (identical level prices 32.338 / 31.580 / 30.985 / 30.567 / 30.149 / 29.632 / 28.796) and the SAME drawn stop price (31.043 vs 31.041, agreeing to 0.002), so EM1's 'next retracement' and EM2-A's 'next fib level' resolve to the SAME level in the author's own worked example. THIS IS NOT TWO INDEPENDENT OBSERVATIONS - it is one observation rendered twice. It is classified 'inferred', not 'book', because the book never states the rule in these terms; the wording and the quantity are reconstructed from the author's chart.",
+      "status": "RESOLVED in Stage 3 Phase 1. The interpretation is adopted and implementation follows in Phase 4.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "NEXT_FIB_LEVEL_SELECTION",
+      "name": "Next Fibonacci level selection (Entry Model 2-A)",
+      "purpose": "How 'the next fib level' is chosen for an Entry Model 2-A stop-loss.",
+      "value": "next_fib_retracement_level_above_entry",
+      "type": "enum",
+      "range": [
+        "next_fib_retracement_level_above_entry",
+        "fixed_78_6_level",
+        "next_ratio_in_sequence_regardless_of_side"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 17,
+      "pdf_passage": "Stoploss has been plotted above the next fib level & above the broader ongoing trendline.",
+      "rationale": "AMB-04 RESOLVED IN STAGE 3. 'Next' must be relative to the entry price and must select a level on the RISK side of the trade (above the entry for a short, below it for a long). Candidates: (A) the nearest retracement level from the book's ratio set that lies beyond the entry on the risk side; (B) a fixed 78.6% level; (C) the next ratio in the standard sequence irrespective of which side of the entry it falls on. The p.17 chart decides it. The entry is at the 50% level (30.567); the drawn stop is 31.041, which is 0.056 above the 61.80% level (30.985) and 0.54 below the 78.60% level (31.580). Option (B) is contradicted outright - the author did not use 78.6%. Option (C) is wrong in general because it can select a level on the profit side of the entry, which cannot bound a stop; it happens to coincide with (A) in this example only because the entry sits at 50%. Option (A) reproduces the author's stop to within 0.06 price units and generalises to any entry level. Classified 'inferred', not 'book': the book states the rule in prose and demonstrates it on one chart, but never defines 'next' or states that the selection is relative to the entry.",
+      "status": "RESOLVED in Stage 3 Phase 1. The interpretation is adopted and implementation follows in Phase 4.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "STOP_LEVEL_COMBINATION",
+      "name": "Combination of the level reference and the broader trendline",
+      "purpose": "How the level reference and the broader trendline are combined into one stop price.",
+      "value": "max_of_level_and_broader_trendline_then_add_buffer",
+      "type": "enum",
+      "range": [
+        "max_of_level_and_broader_trendline_then_add_buffer",
+        "level_only",
+        "trendline_only"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 17,
+      "pdf_passage": "Stoploss has been plotted above the next fib level & above the broader ongoing trendline.",
+      "rationale": "The book requires the stop to be beyond TWO things in EM2-A ('above the next fib level & above the broader ongoing trendline') and to keep 'a suitable distance away from the trendline' in EM1. A stop that is beyond both is the more conservative (further from entry) of the two, so the combination is the MAXIMUM of the two reference prices on the risk side, plus the buffer. In the author's p.16 and p.17 examples the trendline constraint is SLACK - at the entry the broader descending trendline is at 30.79 (p.17) and 30.57 (p.16), both BELOW the 61.80% level of 30.985 that binds - so the two worked examples do not discriminate between this formulation and a level-only rule. The formulation is therefore taken from the book's prose, not from the charts, and is classified 'inferred'. Recorded explicitly so that the combination rule is a visible, reviewable decision rather than an implicit 'max' buried in code.",
+      "status": "RESOLVED in Stage 3 Phase 1 (Q2 option a): hard max/min of the two positional constraints, then a single buffer. The prose states two positional constraints ('above the next fib level & above the broader ongoing trendline'); a minimum-separation distance would be an invented second buffer and is rejected.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "STOP_BUFFER_ATR",
+      "name": "Stop-loss buffer beyond the reference level",
+      "purpose": "Distance added beyond the chosen reference price so the stop is not placed exactly on the level.",
+      "value": 0.1,
+      "type": "number",
+      "range": [
+        0.0,
+        1.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book says 'slightly above' (p.16) and 'slightly above the latest swing high' (p.17) and never quantifies the distance. The author's own charts bound it: measured against the Fibonacci level labels in the p.16/p.17 chart (the same instrument in both), the drawn stop sits 0.058 above the 61.80% level with a chart-measured ATR of about 0.59, i.e. roughly 0.10 ATR. The p.18 Entry Model 2-B chart gives a looser 0.26 above the last swing high, about 0.34 ATR. The observed band is therefore approximately 0.05-0.35 ATR and is NOT a single number, so no value can be claimed as book-derived. 0.1 ATR is proposed because it sits inside the observed band, is small enough not to change which level counts as 'next', and is scale-free in the way a percentage buffer is not. It is an engineering choice and is labelled 'invented'. NOTE: this REPLACES the older STOP_LOSS_BUFFER (10% of the entry-to-swing distance), which was also invented and which scaled every stop distance, every position size and every R-multiple in the system.",
+      "status": "RESOLVED in Stage 3 Phase 1 as the shared buffer value (see STOP_BUFFER_SCOPE). It remains an INVENTED parameter and a candidate for the sensitivity analysis in a later stage; it must NOT be tuned to improve backtest results.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "EM2B_SWING_SELECTION",
+      "name": "Latest swing selection (Entry Model 2-B)",
+      "purpose": "How 'the latest swing high/low' is identified for an Entry Model 2-B stop-loss.",
+      "value": "most_recent_confirmed_swing_extreme",
+      "type": "enum",
+      "range": [
+        "most_recent_confirmed_swing_extreme",
+        "most_recent_confirmed_swing_extreme_excluding_entry_leg"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 17,
+      "pdf_passage": "One more way to plan stoploss is slightly above the latest swing high & above the broader trendline, as there would be little to no chance of that level getting tested again if your trade is supposed to work out.",
+      "rationale": "The book says 'the latest swing high' for a long and, by symmetry, the latest swing low for a short. It does not say how a swing is confirmed, nor whether a swing formed DURING the rally that produced the entry counts. The p.18 chart is a long: the last swing high before the entry is the wick top of the tall candle in the final rally, at about 74.29, and the drawn stop zone begins at 74.498 - above that swing high. The swing that produced the entry leg is therefore the reference, which is consistent with the book's reasoning that the level is unlikely to be tested again. 'Confirmed' is required for causality: an unconfirmed extreme could still be invalidated by a later bar. The confirmation width is not stated by the book and is governed by the existing SWING_RIGHT_BARS parameter.",
+      "status": "RESOLVED in Stage 3 Phase 1. The interpretation is adopted and implementation follows in Phase 4.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "TAKE_PROFIT_RULE",
+      "name": "Take-profit rule",
+      "purpose": "How the target price is determined.",
+      "value": "next_structural_sr_else_fixed_rr",
+      "type": "enum",
+      "range": [
+        "next_structural_sr_else_fixed_rr",
+        "fixed_rr_only"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 17,
+      "pdf_passage": "Target can be plotted considering the next crucial support, whilst paying attention any minor levels that may pop up in between. They, sometimes, have the tendency to create chaos.",
+      "rationale": "The book specifies the target as the next crucial S/R and additionally asks the trader to note minor levels in between. The implementation targets the next structural level when it is at least MIN_TARGET_RR away, and otherwise falls back to a fixed R:R. The 'note the minor levels' half is NOT implemented.",
+      "status": "OPEN - partially book-derived. The minor-level warning is unimplemented and is a Stage 3 candidate.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_target",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateTarget"
+      ],
+      "tests": [
+        "test_stage1_calculations.py::TestPatternStopLossAndTarget"
+      ]
+    },
+    {
+      "id": "MIN_TARGET_RR",
+      "name": "Minimum R:R for a structural target",
+      "purpose": "How far the next structural level must be before it is used as a target rather than a fixed R:R target.",
+      "value": 1.5,
+      "type": "number",
+      "range": [
+        0.0,
+        10.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book contains NO numeric R:R threshold. It only says a stop 'could be too high to make it a good risk to reward ratio' (p.18) - a relative judgement. 1.5 is an engineering threshold borrowed from the pre-existing code and from docs/techniques/07, which is not book-derived.",
+      "status": "OPEN - invented. NOTE: this is NOT the same parameter as MIN_RISK_REWARD below; they happen to share the value 1.5 and must not be conflated.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_target",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateTarget"
+      ],
+      "tests": []
+    },
+    {
+      "id": "TARGET_RR",
+      "name": "Fallback fixed R:R target",
+      "purpose": "The target used when no structural level is at least MIN_TARGET_RR away.",
+      "value": 2.0,
+      "type": "number",
+      "range": [
+        0.1,
+        20.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book never specifies a fallback target. 2.0 is the pre-existing Python value. The TypeScript engine uses 2.5 for the same field - a divergence closed in Stage 1 by adopting 2.0 in both.",
+      "status": "OPEN - invented, overfitting candidate.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_target",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateTarget"
+      ],
+      "tests": []
+    },
+    {
+      "id": "MIN_RISK_REWARD",
+      "name": "Minimum risk:reward filter",
+      "purpose": "Signals whose R:R falls below this are rejected outright.",
+      "value": 1.5,
+      "type": "number",
+      "range": [
+        0.0,
+        10.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book contains NO numeric R:R threshold. The PDF's only related statement is that an EM1 stop 'could be too high to make it a good risk to reward ratio' (p.18), which is a qualitative trigger for switching to EM2, not a hard filter. The 1.5 value appears in docs/techniques/07, which is repo-authored and not authoritative.",
+      "status": "OPEN - invented. Distinct from MIN_TARGET_RR despite sharing the value.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::_should_skip_trade",
+        "app-ts/src/core/RiskManager.ts::checkRisk"
+      ],
+      "tests": []
+    },
+    {
+      "id": "POSITION_SIZING_RULE",
+      "name": "Position sizing rule",
+      "purpose": "How the position size is derived from risk.",
+      "value": "fixed_fractional_equity_at_fill",
+      "type": "enum",
+      "range": [
+        "fixed_fractional_equity_at_fill"
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book contains NO position-sizing formula and no risk percentage. The only related statement is p.20: 'What matters most is the Risk exposure & an entry point that makes complete sense to you'. The rule implemented is the conventional fixed-fractional one: size = (equity * risk_per_trade) / |entry - stop|, computed on the equity available AT THE FILL so that open positions' unrealised P&L is reflected.",
+      "status": "OPEN - invented. The equity-at-fill part IS corroborated by research-py/docs/EXECUTION_SEMANTICS.md section 5.1, which is an internal contract, not the book.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::_calculate_position_size",
+        "app-ts/src/core/RiskManager.ts::calculatePositionSize"
+      ],
+      "tests": [
+        "stage1-calculations.test.ts::D8: risk sizing uses the equity supplied by the caller"
+      ]
+    },
+    {
+      "id": "RISK_PER_TRADE",
+      "name": "Risk per trade",
+      "purpose": "Fraction of equity risked on a single position.",
+      "value": 0.01,
+      "type": "number",
+      "range": [
+        0.0001,
+        0.1
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book specifies no risk percentage. 1% is the Python engine's value. NOTE: the TypeScript engine uses 2% for the same concept (DEFAULT_CONFIG.riskRules.maxRiskPerTrade), which is a live divergence between the engines and is recorded in the divergence report.",
+      "status": "OPEN - invented. Engines currently DISAGREE (1% vs 2%).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestConfig",
+        "app-ts/src/core/RiskManager.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "MAX_OPEN_TRADES",
+      "name": "Maximum concurrent open trades",
+      "purpose": "Cap on simultaneously open positions.",
+      "value": 5,
+      "type": "integer",
+      "range": [
+        1,
+        50
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book has no concurrency rule. 5 is the Python value; TypeScript uses 3 (DEFAULT_CONFIG.riskRules.maxOpenTrades). Engines currently DISAGREE.",
+      "status": "OPEN - invented. Engines currently DISAGREE (5 vs 3).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestConfig",
+        "app-ts/src/config/default.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "COMMISSION_RATE",
+      "name": "Commission rate",
+      "purpose": "Fraction of notional charged per side.",
+      "value": 0.001,
+      "type": "number",
+      "range": [
+        0.0,
+        0.01
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book does not discuss costs. The research engine uses a flat 0.1% per side on the executed notional. The TypeScript engine instead uses a detailed Indian-market fee model (brokerage, STT, GST, stamp duty, SEBI charges) configured in app-ts/src/config/indianMarket.ts, with a 0.1% slippage assumption. The two cost models are structurally different, not merely differently valued.",
+      "status": "OPEN - invented. Research engine uses a flat model; production engine uses an exchange fee model. Documented as a structural divergence.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestConfig",
+        "app-ts/src/config/indianMarket.ts::calculateTradeFees"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestCosts"
+      ]
+    },
+    {
+      "id": "SLIPPAGE_RATE",
+      "name": "Slippage rate",
+      "purpose": "Fraction of price applied against the trader on every fill.",
+      "value": 0.0005,
+      "type": "number",
+      "range": [
+        0.0,
+        0.01
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book does not discuss slippage. The research engine uses 0.05% per side. The TypeScript engine's DEFAULT_CONFIG.trade.slippagePercent is 0.1%, while its Indian-market fee model uses 0.1% as well. Engines currently DISAGREE (0.05% vs 0.1%).",
+      "status": "OPEN - invented. Engines currently DISAGREE (0.05% vs 0.1%).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestConfig",
+        "app-ts/src/config/indianMarket.ts::applySlippage"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestCosts"
+      ]
+    },
+    {
+      "id": "INITIAL_CAPITAL",
+      "name": "Initial capital",
+      "purpose": "Starting account balance for a backtest or paper-trading session.",
+      "value": 100000,
+      "type": "number",
+      "range": [
+        1,
+        1000000000.0
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book is silent. Both engines use 100000.",
+      "status": "OPEN - invented but agreed by both engines.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestConfig",
+        "app-ts/src/config/default.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "SIGNAL_TIMING",
+      "name": "Signal timing rule",
+      "purpose": "Which candles a strategy may observe when deciding.",
+      "value": "closed_candles_only",
+      "type": "enum",
+      "range": [
+        "closed_candles_only"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 20,
+      "pdf_passage": "If you don't follow the rules of the setup, at one point in your career, one after the other act of compromising with one or other rule will make the process of trading feel shallow.",
+      "rationale": "The PDF's discipline requirement implies a decision must rest only on settled information. Concretely: a signal computed from closed bars only, and an order generated from a completed candle fills no earlier than the NEXT candle. This is specified in research-py/docs/EXECUTION_SEMANTICS.md and is a house rule, not a book rule, but it is the one the book most directly demands.",
+      "status": "LOCKED - enforced by both engines and covered by causality regression tests.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestEngine.run",
+        "app-ts/src/core/LiveMonitor.ts::processCandle"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestSignalVisibility",
+        "regression.test.ts::LiveMonitor signal timing"
+      ]
+    },
+    {
+      "id": "ORDER_FILL_DELAY",
+      "name": "Order fill delay",
+      "purpose": "How many bars must pass between a signal and its earliest possible fill.",
+      "value": 1,
+      "type": "integer",
+      "range": [
+        1,
+        10
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "A signal is a decision made when a candle closes; the order can only be acted on afterwards. The book does not discuss it, but self-filling on the signal candle is the classic look-ahead artefact.",
+      "status": "LOCKED - enforced by both engines.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::_execute_pending_orders",
+        "app-ts/src/core/PaperTradingEngine.ts::updateTrade"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestOrderExecution"
+      ]
+    },
+    {
+      "id": "TRADE_TIMESTAMPS",
+      "name": "Trade record timestamps",
+      "purpose": "What the signal_time, entry_time and exit_time fields on a trade record represent.",
+      "value": {
+        "python": "candle_timestamps",
+        "typescript": "candle_timestamps"
+      },
+      "type": "object",
+      "range": [
+        "candle_timestamps",
+        "wall_clock"
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "Both engines record the timestamp of the CANDLE involved at each stage, so a replay is reproducible and two runs over the same data are comparable bar by bar. The production engine previously recorded the wall-clock time at which the record was written, which is correct for live trading but made a historical replay non-comparable. It now carries the originating candle's timestamp, and falls back to the wall clock when no candle time is supplied, which is the live-trading path.",
+      "status": "LOCKED - both engines record candle timestamps. Resolved in Stage 2 (previously divergence DIV-12).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::_open_position",
+        "app-ts/src/db/TradeRepository.ts::createFromSignal",
+        "app-ts/src/core/TradeStateMachine.ts::openTrade"
+      ],
+      "tests": [
+        "test_trade_parity.py::TestTradeParity::test_short_trade_matches_on_every_field"
+      ]
+    },
+    {
+      "id": "GAP_FILL_AT_OPEN",
+      "name": "Gap fill at bar open",
+      "purpose": "Whether an order whose bar opened beyond the limit price fills at the open or at the limit.",
+      "value": true,
+      "type": "boolean",
+      "range": [
+        true,
+        false
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "A market that gapped through the entry never offered the limit price. Filling at the open is the realistic treatment. The TypeScript engine only does this for partial-profit exits (PartialProfitManager.getExitPrice), NOT for the initial entry, so the engines currently DIVERGE here.",
+      "status": "OPEN - research engine complies; production engine does NOT for initial entries. Recorded as a divergence.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::_resolve_entry_fill"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestOrderExecution"
+      ]
+    },
+    {
+      "id": "INTRABAR_POLICY",
+      "name": "Intrabar ambiguity policy",
+      "purpose": "How a bar whose range spans BOTH the stop-loss and the target is resolved.",
+      "value": "stop_first",
+      "type": "enum",
+      "range": [
+        "stop_first",
+        "target_first",
+        "worst_case",
+        "intrabar"
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book does not address intrabar sequence. 'stop_first' is chosen because a backtest that flatters itself is worse than no backtest. The 'intrabar' policy exists for when sub-bar data is supplied. NOTE: 'worst_case' currently behaves identically to 'stop_first' in the research engine, so the name over-promises.",
+      "status": "OPEN - research engine implements the policy; production engine has an implicit stop-first with no configuration.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestConfig"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestAmbiguousBars"
+      ]
+    },
+    {
+      "id": "SAME_BAR_EXIT",
+      "name": "Same-bar exit restriction",
+      "purpose": "Whether a position may be exited on the bar it was opened.",
+      "value": "forbidden",
+      "type": "enum",
+      "range": [
+        "forbidden",
+        "allowed"
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The entry fill and the exit condition are both established by the same candle, and the intrabar sequence is unknown. Both engines forbid it.",
+      "status": "LOCKED - enforced by both engines.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::_update_positions",
+        "app-ts/src/core/PaperTradingEngine.ts::updateTrade"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestOrderExecution",
+        "regression.test.ts::DEFECT TS-02"
+      ]
+    },
+    {
+      "id": "CLOSE_AT_END_OF_DATA",
+      "name": "Close open positions at end of data",
+      "purpose": "Whether positions still open on the final bar are closed out.",
+      "value": true,
+      "type": "boolean",
+      "range": [
+        true,
+        false
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "Without this, a backtest's realised capital and its trade list disagree. The research engine closes at the final bar's close and reports any position that was opened on that same bar separately (it cannot be exited on its own entry bar).",
+      "status": "OPEN - research engine implements it; production engine has no equivalent backtest path.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::BacktestConfig"
+      ],
+      "tests": []
+    },
+    {
+      "id": "HTF_COMPLETION",
+      "name": "Higher-timeframe completion rule",
+      "purpose": "Whether a higher-timeframe filter may use an in-progress higher-timeframe bar.",
+      "value": "completed_htf_only",
+      "type": "enum",
+      "range": [
+        "completed_htf_only"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 9,
+      "pdf_passage": "Weekly (for broader outlook): To mark crucial trendlines on a higher time frame, weekly time frame is crucial, especially when used with logarithmic price scale.",
+      "rationale": "The book's higher-timeframe hierarchy exists to give a BROADER view. An in-progress higher-timeframe bar is not a broader view of settled information; it is a partial one that changes intrabar. Both resamplers implement it: CandleResampler.resample drops a trailing full-but-incomplete bucket (and never emits a leading partial), and resample_ohlcv drops a trailing forming bucket by default (drop_forming_bar=True). The MTF extractor (Phase 3) uses only these completed buckets (invariant L5 in docs/stage3/MTF_TRENDLINE_DESIGN.md).",
+      "status": "LOCKED and implemented by BOTH engines (STAGE 3 UPDATE: the Python engine gained the causal resample in Phase 2 and the MTF extractor in Phase 3; this entry previously said the rule was vacuous there).",
+      "configurable": false,
+      "consumers": [
+        "app-ts/src/core/CandleResampler.ts::resample",
+        "research-py/src/data/loaders.py::resample_ohlcv",
+        "research-py/src/indicators/mtf_trendlines.py::extract_broader_trendlines",
+        "app-ts/src/indicators/mtfTrendlines.ts::extractBroaderTrendlines"
+      ],
+      "tests": [
+        "stage1-calculations.test.ts::D9: the resampler never emits an in-progress HTF bar",
+        "research-py/tests/test_resampler_causality.py",
+        "app-ts/tests/resampler-causality.test.ts"
+      ]
+    },
+    {
+      "id": "HTF_SWING_PARAMS",
+      "name": "HTF swing parameter policy",
+      "purpose": "Which swing parameters the broader-trendline extractor uses on the higher-timeframe series.",
+      "value": "reuse_entry_timeframe",
+      "type": "enum",
+      "range": [
+        "reuse_entry_timeframe",
+        "dedicated_htf_params"
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "Review question Q9 (option a). Reusing SWING_LEFT_BARS/SWING_RIGHT_BARS avoids adding two more invented parameters to an already invention-heavy spec. The confirmation latency is naturally larger in HTF terms (3 HTF bars), which suits the 'broader' role. Trivially changed later if the sensitivity analysis justifies dedicated HTF parameters.",
+      "status": "RESOLVED in Stage 3 Phase 1 (Q9 option a).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/indicators/mtf_trendlines.py",
+        "app-ts/src/indicators/mtfTrendlines.ts"
+      ],
+      "related": [
+        "SWING_LEFT_BARS",
+        "SWING_RIGHT_BARS",
+        "MTF_TIMEFRAME_HIERARCHY"
+      ],
+      "tests": [
+        "research-py/tests/test_strategy_spec.py",
+        "app-ts/tests/strategy-spec.test.ts"
+      ]
+    },
+    {
+      "id": "MTF_TIMEFRAME_HIERARCHY",
+      "name": "Timeframe hierarchy",
+      "purpose": "The higher-timeframe pairing used for each entry timeframe.",
+      "value": {
+        "1m": "5m",
+        "5m": "1h",
+        "15m": "4h",
+        "1h": "4h",
+        "4h": "1d",
+        "1d": "1w",
+        "30m": "1h"
+      },
+      "type": "object",
+      "range": "keys are the supported timeframes",
+      "provenance": "inferred",
+      "pdf_page": 9,
+      "pdf_passage": "Weekly (for broader outlook)... Daily... 4 Hour: The 4 hour time-frame has a similar purpose as the 1-hour time-frame... 1 Hour: Useful for updating the levels every day... 15-mins: Useful for updating the levels and mark any short-term trend lines.",
+      "rationale": "The book names the hierarchy and the purpose of each timeframe. The exact PAIRING (15m -> 4h, 1h -> 4h) is an interpretation: the book describes roles rather than an adjacency table. 30m maps to 1h as the next major timeframe per inferred hierarchy.",
+      "status": "PROVENANCE CORRECTED in Stage 3 Phase 1: 'book' -> 'inferred'. p.9 describes the ROLES of the time frames, not a time-frame-to-time-frame mapping; the pairing is an interpretation. The mapping remains data in this spec and both engines must read it from here. The choice of mapping itself is AMB-08 and stays open for Stage 4.",
+      "configurable": true,
+      "consumers": [
+        "app-ts/src/core/CandleResampler.ts::getHigherTimeframe"
+      ],
+      "tests": []
+    },
+    {
+      "id": "ORDER_INVALIDATION",
+      "name": "Order invalidation rule",
+      "purpose": "Whether a pending order is cancelled when price has already broken the stop-loss before the order fills.",
+      "value": "stop_already_broken_cancels_order",
+      "type": "enum",
+      "range": [
+        "stop_already_broken_cancels_order",
+        "no_invalidation"
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book does not discuss order invalidation. The decision follows the audit's recommendation (docs/stage3/DIVERGENCE_AUDIT.md Q13): the stop is the trade's risk boundary, and an entry whose stop has already been violated is not a trade the method would take. The alternative (no invalidation, a plain resting limit) was rejected because it would leave the engines disagreeing about whether a trade exists, making stop-placement parity uninterpretable.",
+      "status": "RESOLVED in Stage 3 Phase 1 (DIV-10 decision recorded; the status flips to 'resolved' in Phase 4 when both engines implement it).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py",
+        "app-ts/src/core/PaperTradingEngine.ts::isInvalidated"
+      ],
+      "tests": []
+    },
+    {
+      "id": "ORDER_EXPIRY",
+      "name": "Pending order expiry",
+      "purpose": "How long a pending (unfilled) order stays actionable before it is treated as dead.",
+      "value": {
+        "python": "never \u2014 a pending order stays actionable until it fills or the run ends",
+        "typescript": "signal_timestamp + 24h of market time (TradeRepository.createFromSignal stamps expiryTime; PaperTradingEngine.updateTrade expires when candle time passes it)"
+      },
+      "type": "object",
+      "range": "engine-specific; the difference is recorded as DIV-14",
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book does not discuss order expiry. The production engine's 24-hour limit predates this record; the DIV-12 re-anchor moved expiryTime from the wall clock to the signal's market timestamp, and the expiry check now compares candle time. The research engine never expires pending orders. Behavioural and, until this record, unrecorded.",
+      "status": "OPEN \u2014 engines differ; recorded as DIV-14. Not book-derived.",
+      "configurable": false,
+      "consumers": [
+        "app-ts/src/db/TradeRepository.ts::createFromSignal",
+        "app-ts/src/core/PaperTradingEngine.ts::updateTrade"
+      ],
+      "related": [
+        "DIV-14"
+      ],
+      "tests": []
+    },
+    {
+      "id": "ORDER_FILL_CONDITION",
+      "name": "Order fill condition",
+      "purpose": "What a bar must do before a resting order is considered filled.",
+      "value": "touch_only",
+      "type": "enum",
+      "range": [
+        "touch_only",
+        "touch_plus_close_confirmation"
+      ],
+      "provenance": "book",
+      "pdf_page": 17,
+      "pdf_passage": "there is no need to wait for any kind of candle closing confirmation, at-least this is how I use it",
+      "rationale": "BOOK RULE (explicit): entry when price touches or reaches the trigger level, WITHOUT waiting for candle close. p.16 EM1: 'As soon as the price reaches high liquidity zone, one can directly enter into the trade.' p.17 EM2: 'entry must be planned as soon as the trendline gets broken & there is no need to wait for any kind of candle closing confirmation, at-least this is how I use it.' touch_plus_close_confirmation is therefore REJECTED by the source, not an open interpretation. A long fills when bar.low <= entry; a short when bar.high >= entry \u2014 even if the bar closes back on the wrong side of the entry. Both engines implement this. Distinct from TRENDLINE_BREAK_DETECTION (Stage 4 pattern trigger) and from ENTRY_MODEL (rejection candle, still invented).",
+      "status": "RESOLVED \u2014 both engines implement touch_only. DIV-11 is closed.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/backtesting/engine.py::_resolve_entry_fill",
+        "app-ts/src/core/PaperTradingEngine.ts::isEntryHit"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestOrderFillCondition",
+        "tests/execution-parity.test.ts"
+      ]
+    },
+    {
+      "id": "PERFORMANCE_METRICS",
+      "name": "Performance metric set",
+      "purpose": "Which performance statistics the engine reports and how they are defined.",
+      "value": {
+        "research_engine": [
+          "total_trades",
+          "win_rate",
+          "avg_win",
+          "avg_loss",
+          "profit_factor",
+          "expectancy",
+          "avg_r_multiple",
+          "max_drawdown",
+          "max_drawdown_duration",
+          "sharpe_ratio",
+          "sortino_ratio",
+          "calmar_ratio",
+          "cagr",
+          "volatility",
+          "total_return",
+          "total_pnl"
+        ],
+        "annualisation": "derived_from_data_bar_spacing",
+        "max_drawdown_basis": "time_series_equity_curve"
+      },
+      "type": "object",
+      "range": null,
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The book asks the trader to backtest the setup at least a hundred times (p.18) but defines no metrics. The research engine's metric set is the standard one. The TypeScript production engine has NO Sharpe/Sortino and computes drawdown from the ordered trade sequence rather than from a time-indexed equity curve, so its 'drawdown' is not the same quantity.",
+      "status": "OPEN - the two engines report DIFFERENT metric sets with different definitions for the one overlapping name (max drawdown). Recorded as DIV-08. Closing it requires adding metrics to the production stack, which is out of scope for Stage 2.",
+      "configurable": false,
+      "consumers": [
+        "research-py/src/backtesting/metrics.py::calculate_metrics",
+        "app-ts/src/api/routes/stats.ts",
+        "app-ts/src/reports/ReportGenerator.ts"
+      ],
+      "tests": [
+        "test_backtest_engine.py::TestReproducibility"
+      ]
+    },
+    {
+      "id": "TRAILING_STOP_RULE",
+      "name": "Trailing stop rule",
+      "purpose": "How an open position's stop is trailed once in profit.",
+      "value": "not_implemented_in_python_rmultiple_in_typescript",
+      "type": "enum",
+      "range": [
+        "not_implemented_in_python_rmultiple_in_typescript",
+        "trendline_candle_close"
+      ],
+      "provenance": "book",
+      "pdf_page": 19,
+      "pdf_passage": "This trendline can now be used as a trailing stoploss on candle closing basis. Suitable time frames: Intraday Trading - 15mins, Swing Trading- 1 Hour",
+      "rationale": "The book requires a TRENDLINE trailing evaluated on candle close, with the timeframe chosen by trading style. The TypeScript engine implements an R-multiple trailing (breakeven / step / ATR), which is a different rule. The research engine has no trailing stop at all.",
+      "status": "OPEN - NOT IMPLEMENTED as the book describes in either engine. The TypeScript R-multiple trailing is a DIFFERENT rule, not a partial implementation of this one. Blocking for Stage 3.",
+      "configurable": true,
+      "consumers": [
+        "app-ts/src/core/PaperTradingEngine.ts::updateTrailingStop"
+      ],
+      "tests": []
+    },
+    {
+      "id": "PARTIAL_TAKE_PROFIT",
+      "name": "Partial take-profit ladder",
+      "purpose": "Whether the position is scaled out at intermediate R multiples.",
+      "value": {
+        "enabled": true,
+        "tp1": {
+          "r_multiple": 1,
+          "fraction": 0.5
+        },
+        "tp2": {
+          "r_multiple": 2,
+          "fraction": 0.3
+        },
+        "tp3": {
+          "r_multiple": 3,
+          "fraction": 0.2
+        },
+        "move_to_breakeven_after": "TP1"
+      },
+      "type": "object",
+      "range": "fractions must sum to 1.0",
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "RECLASSIFIED IN STAGE 3: this parameter was previously tagged 'book' with a p.18 citation. That citation was VERIFIED AGAINST THE PDF AND DOES NOT EXIST IN IT. The words 'Partial Profits (Optional) - Consider partial at 1:1 or 1.5:1 R:R - Trail remainder with trendline - Reduces risk, locks in gains' are verbatim from this repository's own docs/techniques/05-entry-models-trade-management.md (lines 106-109), which is a repo-authored summary, NOT the source methodology. Two independent extractors (pypdf and PyMuPDF) find no occurrence of 'Partial', 'Optional', '1:1', '1.5:1', 'locks in gains' or 'Trail remainder' anywhere in the 20-page PDF, and the text layer of pages 16-19 was inspected directly; the book's only stop/exit guidance is the three stop-placement rules and the p.19 trendline trailing stop. The 50/30/20 ladder at 1R/2R/3R is therefore ENTIRELY INVENTED: it has no support in the source methodology. The ladders' R multiples, the fraction split, and the break-even rule are all engineering choices. It is retained here because the TypeScript engine implements it and it materially changes exit prices and R-multiples (DIV-05), but it must not be presented as the author's method. The nearest book support is p.19: 'This trendline can now be used as a trailing stoploss on candle closing basis', which supports trailing the remainder but specifies no partial scale-out levels.",
+      "status": "OPEN - RECLASSIFIED FROM 'book' TO 'invented' IN STAGE 3. The prior 'book' citation was not verifiable in the PDF and originated in this repo's own docs/techniques/. The two engines are structurally different here: the research engine has no partial-exit support at all. Because the ladder is invented rather than book-derived, the most faithful implementation of the methodology may be to implement the p.19 trendline trailing stop instead of an invented partial ladder. That decision is deferred to a later stage; it is NOT required for Stage 3 stop-placement work.",
+      "configurable": true,
+      "consumers": [
+        "app-ts/src/core/PaperTradingEngine.ts",
+        "app-ts/src/types/trade.ts::DEFAULT_PARTIAL_TP_CONFIG"
+      ],
+      "tests": []
+    },
+    {
+      "id": "HTF_TRENDLINE_MISSING_BEHAVIOUR",
+      "name": "Missing or invalid broader trendline behaviour",
+      "purpose": "What the stop rule does when no valid broader-timeframe trendline exists for an EM2-A / EM2-B stop (no HTF data, or no candidate line with the minimum touch count).",
+      "value": "reject_signal",
+      "type": "enum",
+      "range": [
+        "reject_signal",
+        "fallback_to_level"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 18,
+      "pdf_passage": "If you do not see all the three confirmations, it is better to wait for the setup to become favourable rather than taking a trade just for the sake of it",
+      "rationale": "CONSOLIDATES review questions Q1 and Q10 into one decision. The book (p.18) treats a missing confirmation as a reason to WAIT, not as a licence to place a stop that does not satisfy the rule. Falling back to the Fibonacci level alone would produce a stop that violates the book's own two-constraint structure, and would make trade counts depend silently on dataset length (a short history has no HTF trendline and would trade differently from a long one). The cost is a lower signal count, which is reported, not absorbed. Applies identically to EM2-A and EM2-B. EM1 is NOT affected: its trendline clause is a secondary distance check and is handled by EM1_TRENDLINE_CLAUSE (Q5).",
+      "status": "RESOLVED in Stage 3 Phase 1 (Q1+Q10). The extractor must expose a diagnostic counting how many signals were rejected for a missing trendline so the effect is measurable.",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "STOP_BUFFER_SCOPE",
+      "name": "Stop buffer scope",
+      "purpose": "Whether the ATR stop buffer is one shared value or one per entry model (EM1 / EM2-A / EM2-B).",
+      "value": "shared_single_buffer",
+      "type": "enum",
+      "range": [
+        "shared_single_buffer",
+        "per_model"
+      ],
+      "provenance": "invented",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "The author's own charts show buffers of roughly 0.10 ATR (p.16/17) and 0.34 ATR (p.18) - a ~3x spread, which argues for per-model values. A per-model buffer would, however, add two more invented parameters to an already invention-heavy spec, and the p.16/p.17 charts are the SAME observation (same instrument, same levels, same drawn stop), so the effective evidence is n=2, not n=3. One shared buffer (STOP_BUFFER_ATR = 0.1) is chosen for parsimony; if the later sensitivity analysis shows the models need different buffers, this decision is revisited - as a hypothesis test, never as profit tuning.",
+      "status": "RESOLVED in Stage 3 Phase 1 (Q3 option a, against the analysis's initial lean, for parameter parsimony; the reasoning is recorded rather than the lean).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "STOP_BUFFER_APPLICATION",
+      "name": "Stop buffer application point",
+      "purpose": "Whether the ATR buffer is added once beyond the binding reference (the more conservative of level and trendline) or beyond each reference before combining.",
+      "value": "applied_to_binding_reference",
+      "type": "enum",
+      "range": [
+        "applied_to_binding_reference",
+        "applied_to_each_then_combined"
+      ],
+      "provenance": "inferred",
+      "pdf_page": null,
+      "pdf_passage": null,
+      "rationale": "Applying the buffer to each reference and then taking the more conservative double-counts the buffer whenever both constraints bind, pushing the stop further than either reading of 'slightly beyond' supports. The buffer expresses 'slightly beyond the reference', and there is one binding reference, so it is applied once, after the combination.",
+      "status": "RESOLVED in Stage 3 Phase 1 (Q4 option a).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "EM1_TRENDLINE_CLAUSE",
+      "name": "EM1 trendline clause semantics",
+      "purpose": "What 'keeping a suitable distance away from the trendline' (p.16, EM1) requires of the stop.",
+      "value": "beyond_the_trendline",
+      "type": "enum",
+      "range": [
+        "beyond_the_trendline",
+        "not_too_close_only"
+      ],
+      "provenance": "inferred",
+      "pdf_page": 16,
+      "pdf_passage": "Stoploss in this situation can be put slightly above the next retracement whilst keeping a suitable distance away from the trendline as well.",
+      "rationale": "Two readings exist: (a) the stop must lie beyond the trendline (the trendline is a second positional constraint, like EM2-A), or (b) the stop must merely not sit too close to it. (a) is adopted for symmetry with EM2-A and EM2-B, which both use 'above the broader ongoing trendline' as a positional constraint; reading EM1's clause as the weaker 'not too close' would make EM1's stop the only one allowed between the level and the trendline, which has no support in the text. When no entry-timeframe trendline is available the clause is treated as VACUOUS (EM1's binding reference is the retracement level), so EM1 does not depend on multi-timeframe data availability - this is the design document's recommended default and is recorded here rather than left implicit.",
+      "status": "RESOLVED in Stage 3 Phase 1 (Q5 option a).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    },
+    {
+      "id": "FIB_LEVEL_ELIGIBILITY",
+      "name": "Eligible Fibonacci levels for the stop reference",
+      "purpose": "Which retracement levels may serve as the 'next' level for EM1 and EM2-A stops.",
+      "value": "book_ratios_only",
+      "type": "enum",
+      "range": [
+        "book_ratios_only",
+        "any_computed_level"
+      ],
+      "provenance": "book",
+      "pdf_page": 10,
+      "pdf_passage": "Fibonacci levels of 23.6%, 38.2%, 50%, 61.8%, 78.6% are considered the most crucial retracement zones.",
+      "rationale": "The stop reference must be one of the book's ratio set {23.6%, 38.2%, 50%, 61.8%, 78.6%} (p.10, FIB_RATIOS). Using any computed level (e.g. extensions or confluence-derived prices) would let an invented level become the stop anchor. The author's own charts use only levels from this set.",
+      "status": "RESOLVED in Stage 3 Phase 1 (Q6 option a).",
+      "configurable": true,
+      "consumers": [
+        "research-py/src/patterns/confluence_zone.py::calculate_stop_loss",
+        "app-ts/src/patterns/ConfluenceZonePattern.ts::calculateStopLoss"
+      ],
+      "tests": []
+    }
+  ],
+  "engine_divergences": [
+    {
+      "id": "DIV-01",
+      "parameter": "RISK_PER_TRADE",
+      "python": 0.01,
+      "typescript": 0.02,
+      "severity": "high",
+      "detail": "Different risk budgets produce different position sizes, so no trade can be compared for size even when the signal is identical.",
+      "resolution_stage": 2,
+      "status": "deferred",
+      "status_meaning": "The difference is deliberate (for example market-specific execution economics) or out of scope for the current stage. It is not a defect."
+    },
+    {
+      "id": "DIV-02",
+      "parameter": "MAX_OPEN_TRADES",
+      "python": 5,
+      "typescript": 3,
+      "severity": "medium",
+      "detail": "Different concurrency caps can change which signals are admitted.",
+      "resolution_stage": 2,
+      "status": "deferred",
+      "status_meaning": "The difference is deliberate (for example market-specific execution economics) or out of scope for the current stage. It is not a defect."
+    },
+    {
+      "id": "DIV-03",
+      "parameter": "SLIPPAGE_RATE",
+      "python": 0.0005,
+      "typescript": 0.001,
+      "severity": "high",
+      "detail": "Different fill prices and therefore different P&L for every trade.",
+      "resolution_stage": 2,
+      "status": "deferred",
+      "status_meaning": "The difference is deliberate (for example market-specific execution economics) or out of scope for the current stage. It is not a defect."
+    },
+    {
+      "id": "DIV-04",
+      "parameter": "COMMISSION_RATE",
+      "python": "flat 0.1% per side on executed notional",
+      "typescript": "Indian exchange fee model: brokerage + STT + GST + stamp duty + SEBI + slippage",
+      "severity": "high",
+      "detail": "The two cost models are structurally different, not merely differently valued. Total round-trip cost differs materially.",
+      "resolution_stage": 2,
+      "status": "deferred",
+      "status_meaning": "The difference is deliberate (for example market-specific execution economics) or out of scope for the current stage. It is not a defect."
+    },
+    {
+      "id": "DIV-05",
+      "parameter": "PARTIAL_TAKE_PROFIT",
+      "python": "not implemented at all",
+      "typescript": "implemented and enabled by default (50/30/20 at 1R/2R/3R)",
+      "severity": "high",
+      "detail": "The production engine scales out of a position; the research engine holds to the target or stop. The two produce different exit prices, different P&L and different R-multiples for the same signal. THIS IS THE PRIMARY BLOCKER FOR TRADE-LEVEL PARITY. STAGE 3 UPDATE: this is NOT a 'deferred' difference in the sense of a deliberate market-specific choice. Stage 3 Step 2 established that the 50/30/20 ladder is INVENTED, not book-derived - the passage cited as its source is verbatim from this repository's own docs/techniques/ and does not exist in the PDF. The book's only stated exit-management rule is p.19 ('This trendline can now be used as a trailing stoploss on candle closing basis'). The decision - implement the book rule, or keep the invented ladder disabled and identical in both engines - is OPEN. Implementation of the trailing stop is gated on the multi-timeframe trendline extractor (Stage 3 Step 3).",
+      "resolution_stage": 3,
+      "status": "open",
+      "status_meaning": "The difference is deliberate (for example market-specific execution economics) or out of scope for the current stage. It is not a defect.",
+      "resolution": "DECIDED in Stage 3 Phase 1 (Q15 option a): the invented 50/30/20 partial ladder is dropped and the book's p.19 trendline trailing stop ('This trendline can now be used as a trailing stoploss on candle closing basis') becomes the exit-management rule in BOTH engines. IMPLEMENTATION IS GATED on the multi-timeframe trendline extractor (Phase 3), because the trailing stop is evaluated on the broader trendline. Until then the ladder stays disabled in the TypeScript engine so no parity claim is made on an invented rule."
+    },
+    {
+      "id": "DIV-06",
+      "parameter": "GAP_FILL_AT_OPEN",
+      "python": "initial entry fills at the bar open when gapped through",
+      "typescript": "only partial-profit exits honour the gap; the initial entry fills at the limit price",
+      "severity": "medium",
+      "detail": "initial entry fills at the bar open when gapped through (Python, correct for a resting limit order) vs the initial entry fills at the limit price (TypeScript). STAGE 3 UPDATE: these are DIFFERENT ORDER TYPES, and the two behaviours are each correct for a different order. A resting limit that the market gaps through fills at the open (favourably); a stop order gapped through fills at the open (unfavourably) because the limit price was never offered. The TypeScript engine honours the gap on partial-profit exits but NOT on the initial entry, which is an intra-engine INCONSISTENCY and a real correctness issue - but it is a separate fix from aligning the engines. Deferred: it does not block stop placement. See docs/stage3/DIVERGENCE_AUDIT.md.",
+      "resolution_stage": 2,
+      "status": "deferred",
+      "status_meaning": "The two engines currently differ. The difference is recorded and unresolved."
+    },
+    {
+      "id": "DIV-07",
+      "parameter": "INTRABAR_POLICY",
+      "python": "configurable: stop_first / target_first / worst_case / intrabar",
+      "typescript": "implicit stop-first, not configurable",
+      "severity": "medium",
+      "detail": "configurable: stop_first / target_first / worst_case / intrabar (Python) vs implicit stop-first, not configurable (TypeScript). STAGE 3 UPDATE: the two engines already AGREE by default (Python's default is stop_first). The divergence is a CAPABILITY gap, not a behaviour difference. It does not block stop placement, but a new stop rule changes how often ambiguous bars occur, and the production engine currently cannot even express the alternatives. Deferred with a directed capability fix (make the TypeScript policy configurable with the same vocabulary and the same default). See docs/stage3/DIVERGENCE_AUDIT.md.",
+      "resolution_stage": 2,
+      "status": "deferred",
+      "status_meaning": "The two engines currently differ. The difference is recorded and unresolved."
+    },
+    {
+      "id": "DIV-08",
+      "parameter": "PERFORMANCE_METRICS",
+      "python": "Sharpe, Sortino, Calmar, CAGR, volatility, max drawdown, all annualised from the data's own bar spacing",
+      "typescript": "no Sharpe/Sortino at all; the dashboard's drawdown is computed per-trade, not from a time-based equity curve",
+      "severity": "high",
+      "detail": "The TypeScript dashboard's 'drawdown' is not comparable with the research engine's. Stage 2 cannot close this without adding metrics to the production stack, which is out of scope here; it is recorded as an open divergence.",
+      "resolution_stage": 3,
+      "status": "open",
+      "status_meaning": "The two engines currently differ. The difference is recorded and unresolved."
+    },
+    {
+      "id": "DIV-09",
+      "parameter": "TRAILING_STOP_RULE",
+      "python": "not implemented",
+      "typescript": "R-multiple trailing (breakeven / step / ATR), not trendline-based",
+      "severity": "high",
+      "detail": "The book's rule (p.19) is a TRENDLINE trailing on candle-close basis. Neither engine implements it; the TypeScript engine implements something else entirely. Recorded as a gap, not a parity fix.",
+      "resolution_stage": 3,
+      "status": "deferred",
+      "status_meaning": "The difference is deliberate (for example market-specific execution economics) or out of scope for the current stage. It is not a defect."
+    },
+    {
+      "id": "DIV-10",
+      "parameter": "ORDER_INVALIDATION",
+      "python": "not implemented - a pending order fills on the next bar regardless of whether the stop was already broken",
+      "typescript": "a pending order is cancelled if the bar's range has already broken the stop-loss",
+      "severity": "high",
+      "detail": "The two engines disagree on every signal whose bar breaks the stop. In the trade-parity fixture this is exactly the LONG rejection candle, whose wick deliberately dips through the stop: the TypeScript engine cancels the order, the Python engine fills it. The divergence is a BEHAVIOUR difference, not a rounding difference.",
+      "resolution_stage": 3,
+      "status": "open",
+      "status_meaning": "Resolved in Stage 3 Phase 1. Both engines now cancel a pending order whose stop-loss was already broken by the bar's range before the entry could fill.",
+      "resolution": "DECIDED (Q13 option a): stop_already_broken_cancels_order. A pending order is cancelled when the bar's range has already broken the trade's initial stop-loss before the entry could fill. Rationale: the stop is the trade's risk boundary; an entry whose stop has already been violated is not a trade the method would take. The alternative (a plain resting limit with no invalidation) models a different order type and was rejected because it would let the engines disagree about whether a trade exists at all - which would make stop-placement parity uninterpretable. This decision MUST be implemented in both engines BEFORE the new stop rule lands, because the stop is the input to the invalidation check.",
+      "decision": "DECIDED in Stage 3 Phase 1 (Q13 option a): stop_already_broken_cancels_order. A pending order is cancelled when the bar's range has already broken the trade's initial stop-loss before the entry could fill. Rationale: the stop is the trade's risk boundary; an entry whose stop has already been violated is not a trade the method would take. The alternative (a plain resting limit with no invalidation) models a different order type and was rejected because it would let the engines disagree about whether a trade exists at all - which would make stop-placement parity uninterpretable. This decision MUST be implemented in both engines BEFORE the new stop rule lands, because the stop is the input to the invalidation check. Status flips to 'resolved' in Phase 4 when both engines implement it."
+    },
+    {
+      "id": "DIV-11",
+      "parameter": "ORDER_FILL_CONDITION",
+      "python": "long: bar.low <= entry. short: bar.high >= entry. (touch only)",
+      "typescript": "long: bar.low <= entry. short: bar.high >= entry. (touch only)",
+      "severity": "resolved",
+      "detail": "Both engines fill on touch only. CORRECTION (Phase 3 review): the book rule is entry when price touches/reaches the trigger level, WITHOUT candle-close confirmation. close_beyond / touch_plus_close_confirmation is explicitly rejected by p.17. Any draft that framed the entry trigger as 'close beyond the trigger level' contradicted the same passages used as evidence and is void.",
+      "resolution_stage": 3,
+      "status": "resolved",
+      "status_meaning": "The two engines now behave identically. The difference was closed and must not be reintroduced.",
+      "resolution": "DECIDED (Q14 option a): touch_only \u2014 NOT close-beyond. A long fills when bar.low <= entry (even if close < entry); a short fills when bar.high >= entry (even if close > entry). Book evidence is explicit on both models: p.16 'As soon as the price reaches high liquidity zone, one can directly enter into the trade' and p.17 'there is no need to wait for any kind of candle closing confirmation, at-least this is how I use it'. No interpretation step was required for this parameter; the book settles it.",
+      "decision": "RESOLVED. Rule = Entry when price touches or reaches the trigger level, without waiting for candle close. The alternative (entry only after a candle closes beyond the trigger level) is rejected by the book. Both engines implement touch_only. Related but separate: TRENDLINE_BREAK_DETECTION (Stage 4) must use the same no-close-wait rule when EM2 is implemented; ENTRY_MODEL's rejection-candle trigger remains invented and open for Stage 4."
+    },
+    {
+      "id": "DIV-12",
+      "parameter": "TRADE_TIMESTAMPS",
+      "python": "signal_time, entry_time and exit_time are the CANDLE timestamps of the bars involved",
+      "typescript": "RESOLVED in Stage 2: signal_time, entry_time and exit_time are now the CANDLE timestamps of the bars involved. TradeRepository.createFromSignal uses signal.timestamp, and TradeStateMachine's transitions take the originating candle's time (falling back to the wall clock when it is omitted, which is the correct default for live trading).",
+      "severity": "resolved",
+      "detail": "Previously the production engine recorded wall-clock times, so a replay through it could not be compared bar by bar with the research engine. The production engine now carries the originating candle's timestamp onto the trade record. The two engines agree on the instant; only the string formatting differs (the Python dump emits a naive ISO string, the TypeScript dump a UTC one), which the parity test normalises.",
+      "resolution_stage": 2,
+      "status": "resolved",
+      "status_meaning": "The two engines now behave identically. The difference was closed and must not be reintroduced."
+    },
+    {
+      "id": "DIV-13",
+      "parameter": "TRENDLINE_SELECTION",
+      "python": "RESOLVED in Stage 2: ALL detected trendlines are consulted. The previous behaviour checked only the three strongest, which made the engines disagree whenever a relevant line ranked lower.",
+      "typescript": "all trendlines are consulted (isPriceAtTrendline scans the whole list with no cap)",
+      "severity": "resolved",
+      "detail": "Found by the trade-parity fixture in Stage 2. A relevant line that ranked below the top three was invisible to the Python engine, so the engines disagreed on whether a trendline factor was present. The Python engine was aligned to the TypeScript behaviour, which is also the more defensible rule: a line price is currently touching is a line price is respecting, regardless of how many other lines also touch. Verified: research-py/src/patterns/confluence_zone.py iterates the full trendline list, and app-ts/src/indicators/trendlines.ts::isPriceAtTrendline loops over the whole array.",
+      "resolution_stage": 2,
+      "status": "resolved",
+      "status_meaning": "The two engines now behave identically. The difference was closed and must not be reintroduced."
+    },
+    {
+      "id": "DIV-14",
+      "parameter": "ORDER_EXPIRY",
+      "python": "no expiry - a pending order remains actionable until it fills or the run ends",
+      "typescript": "a pending order is EXPIRED when the candle time passes signal time + 24h (createFromSignal stamps expiryTime from signal.timestamp; updateTrade checks atTime > expiryTime)",
+      "severity": "medium",
+      "detail": "Recorded in the Stage 3 Phase 3 review. The DIV-12 re-anchor moved expiryTime from the wall clock to the signal's market timestamp, so a replayed pending order now expires 24h of market time after its signal bar in the production engine, while the research engine keeps it alive for the whole dataset. The trade-parity fixture (2.2 days, entries touched within hours) does not trigger it, so the difference is silent there. The 24h limit itself is a defensible live-market rule; the point is that the two engines disagree on replay and the disagreement is now on the record.",
+      "resolution_stage": 3,
+      "status": "open",
+      "status_meaning": "The two engines currently differ. The difference is recorded and unresolved."
+    }
+  ],
+  "ambiguities_in_the_book": [
+    {
+      "id": "AMB-01",
+      "topic": "What counts as one confirmation",
+      "book_position": "p.11 and p.16 require 'at-least 3 confirmations' and name Level, Trendline and Fibonacci. The book does not say whether an S/R zone and a trendline that share a swing point are one confirmation or two.",
+      "proposed_interpretation": "Two factors that derive from the SAME structural swing count as ONE confirmation, because they are one piece of evidence observed twice. Only factors anchored on distinct structure count separately. This is inferred, not book-derived.",
+      "affects": [
+        "MIN_CONFLUENCE_FACTORS",
+        "CONFLUENCE_FACTOR_INDEPENDENCE"
+      ],
+      "resolution_stage": 5,
+      "status": "open",
+      "resolution_note": "Open. Must be settled before the stage named in resolution_stage."
+    },
+    {
+      "id": "AMB-02",
+      "topic": "Whether the three confirmations must be the named triple",
+      "book_position": "p.11 names 'Level + Trendline + Fibonacci' and 'Level + trendlines'. The second has only two elements, so 'three confirmations' cannot mean 'these exact three'.",
+      "proposed_interpretation": "Any three DISTINCT elements qualify. 'Level + trendlines' is a two-element case which, per p.18, forces Entry Model 2 rather than being rejected outright.",
+      "affects": [
+        "MIN_CONFLUENCE_FACTORS"
+      ],
+      "resolution_stage": 5,
+      "status": "open",
+      "resolution_note": "Open. Must be settled before the stage named in resolution_stage."
+    },
+    {
+      "id": "AMB-03",
+      "topic": "What 'the next retracement' means for an Entry Model 1 stop",
+      "book_position": "p.16 says the stop goes 'slightly above the next retracement whilst keeping a suitable distance away from the trendline'. Neither term is quantified, and 'retracement' could mean a Fibonacci level, a structural swing, or a percentage pullback.",
+      "proposed_interpretation": "RESOLVED IN STAGE 3. 'The next retracement' (p.16) is the next Fibonacci retracement level from the book's ratio set that lies BEYOND THE ENTRY PRICE ON THE RISK SIDE (above the entry for a short, below it for a long). In the author's own p.16 worked example the entry is at the 50% level (30.567) and the drawn stop (31.043) is just above the 61.80% level (30.985) and far below the 78.60% level (31.580). A swing-anchored reading is contradicted by the same chart, where the nearest swing high above the entry is materially higher than the stop the author drew. Recorded as the parameter NEXT_RETRACEMENT_SELECTION with provenance 'inferred'.",
+      "affects": [
+        "STOP_LOSS_RULE",
+        "NEXT_RETRACEMENT_SELECTION",
+        "STOP_LEVEL_COMBINATION",
+        "STOP_BUFFER_ATR"
+      ],
+      "resolution_stage": 3,
+      "status": "resolved",
+      "resolution_note": "Settled in Stage 3. The interpretation was adopted and recorded as the parameter NEXT_RETRACEMENT_SELECTION (provenance: inferred, NOT book, because the book never defines the term in these terms - the definition is reconstructed from the author's single worked chart). Evidence base is n=1 instrument, so it is not validated across markets. Implementation is gated on approval; the production stop logic is unchanged."
+    },
+    {
+      "id": "AMB-04",
+      "topic": "What 'the next fib level' means for an Entry Model 2 Method A stop",
+      "book_position": "p.17 says the stop goes 'above the next fib level & above the broader ongoing trendline'. 'Next' relative to the entry, and 'broader' relative to the entry timeframe, are both unquantified.",
+      "proposed_interpretation": "RESOLVED IN STAGE 3. 'The next fib level' (p.17) is the nearest retracement level from the book's ratio set {23.6%, 38.2%, 50%, 61.8%, 78.6%} that lies BEYOND THE ENTRY PRICE ON THE RISK SIDE. 'Next' is therefore relative to the entry, not a fixed ratio and not a position in the sequence. In the author's p.17 chart the entry is at the 50% level (30.567) and the drawn stop (31.041) sits 0.056 above the 61.80% level (30.985); the 78.6% level (31.580) is NOT used. A fixed-78.6% reading is therefore contradicted by the source, and a 'next ratio in the sequence regardless of side' reading is unsafe because it can select a level on the profit side of the entry, which cannot bound a stop. Recorded as the parameter NEXT_FIB_LEVEL_SELECTION with provenance 'inferred'.",
+      "affects": [
+        "STOP_LOSS_RULE",
+        "NEXT_FIB_LEVEL_SELECTION",
+        "STOP_LEVEL_COMBINATION",
+        "STOP_BUFFER_ATR"
+      ],
+      "resolution_stage": 3,
+      "status": "resolved",
+      "resolution_note": "Settled in Stage 3. The interpretation was adopted and recorded as the parameter NEXT_FIB_LEVEL_SELECTION (provenance: inferred, NOT book). The book states the rule in prose and demonstrates it on one chart but never defines 'next'; the side-of-entry constraint is an interpretation added for safety. Note that AMB-03 and AMB-04 resolve to the SAME level in the author's p.16/p.17 example, because both charts show the same instrument with the same Fibonacci structure and the same drawn stop price (31.043 vs 31.041). That is ONE observation rendered twice, not two independent confirmations. Implementation is gated on approval; the production stop logic is unchanged."
+    },
+    {
+      "id": "AMB-05",
+      "topic": "Whether a level confirmed by a single touch is tradeable",
+      "book_position": "p.8 permits a level with one touchpoint; the implementation requires two.",
+      "proposed_interpretation": "Keep two. It is a deliberate strengthening and is labelled as such.",
+      "affects": [
+        "SR_MIN_TOUCHES"
+      ],
+      "resolution_stage": 2,
+      "status": "resolved",
+      "resolution_note": "Settled in Stage 2. The proposed interpretation was adopted: the implementation keeps min_touches = 2 rather than the book's 1. This is a deliberate strengthening of the book and is recorded as such on the SR_MIN_TOUCHES parameter. It is retained here for auditability, not because it remains open."
+    },
+    {
+      "id": "AMB-06",
+      "topic": "Whether the R:R threshold has a numeric value",
+      "book_position": "The book contains no number. It only says an EM1 stop 'could be too high to make it a good risk to reward ratio'.",
+      "proposed_interpretation": "None available from the source. 1.5 is an engineering threshold and is labelled invented. The book's qualitative statement is better expressed as the p.18 rule 'forced to Entry Model 2' than as a hard rejection filter, which Stage 4/5 should implement instead.",
+      "affects": [
+        "MIN_RISK_REWARD",
+        "MIN_TARGET_RR"
+      ],
+      "resolution_stage": 4,
+      "status": "open",
+      "resolution_note": "Open. Must be settled before the stage named in resolution_stage."
+    },
+    {
+      "id": "AMB-07",
+      "topic": "Whether the confluence count should be evaluated on the entry timeframe or a higher one",
+      "book_position": "p.16 says 'In the above chart as we switched to a lower time frame, we were able to spot an area that provided us with 3 confirmations'.",
+      "proposed_interpretation": "Confirmations are spotted on the ENTRY timeframe, using higher timeframes for context (trend, structure). Deferred until the MTF work lands.",
+      "affects": [
+        "MIN_CONFLUENCE_FACTORS"
+      ],
+      "resolution_stage": 5,
+      "status": "open",
+      "resolution_note": "Open. Must be settled before the stage named in resolution_stage."
+    },
+    {
+      "id": "AMB-08",
+      "topic": "What 'the broader ongoing trendline' is, in time frame and construction",
+      "book_position": "p.17 requires the EM2-A and EM2-B stops to sit 'above the broader ongoing trendline' and EM1 to keep 'a suitable distance away from the trendline'. p.19 states the trendline's role in trade management and names the time frames for the trailing stop. p.9 describes the role of weekly, daily, 4-hour, 1-hour and 15-minute time frames in marking levels and trendlines, but never defines 'broader' as a rule.",
+      "proposed_interpretation": "OPEN - Stage 3 Step 3 produces a DESIGN for the multi-timeframe trendline extractor, but the design is not yet implemented and the ambiguity is not yet settled. The key open question is whether 'broader' means a fixed higher time frame (for example daily for intraday entries) or the next time frame up in the hierarchy. p.9's separation of 'intraday trading' (hourly for levels and trendlines, 15-minute for short-term trendlines and trade management) and 'swing trading' (daily and 4-hour to begin marking recently important levels, 1-hour to update them daily, weekly for the broader outlook) suggests the broader time frame depends on the trading style, which implies a mapping from entry time frame to trendline time frame rather than a single fixed step. That mapping is what the Step 3 design must make explicit and testable.",
+      "affects": [
+        "STOP_LOSS_RULE",
+        "MTF_TIMEFRAME_HIERARCHY",
+        "HTF_COMPLETION",
+        "STOP_LEVEL_COMBINATION"
+      ],
+      "resolution_stage": 4,
+      "status": "open",
+      "resolution_note": "Open. The Stage 3 Step 3 design fixes the construction, but the selection of the broader time frame is deferred to Stage 4 so that the design can be reviewed on its own before a time frame mapping is committed."
+    }
+  ],
+  "consumption": {
+    "mechanism": "shared/fixtures/strategy_spec.json is the single source of truth. Each engine has a thin READ-ONLY loader that reads it, and a test that asserts the engine's LIVE values equal the spec's values for every parameter the engine consumes. Neither engine keeps a second copy of the values.",
+    "python_loader": "research-py/src/strategies/strategy_spec.py",
+    "typescript_loader": "app-ts/src/strategies/strategySpec.ts",
+    "consistency_tests": [
+      "research-py/tests/test_strategy_spec.py",
+      "app-ts/tests/strategy-spec.test.ts"
+    ],
+    "parity_harnesses": {
+      "indicator_parity": {
+        "python": "scripts/parity_dump.py (mode: python)",
+        "typescript": "app-ts/src/cli/parityDump.ts",
+        "fixture": "shared/fixtures/parity_15m.csv",
+        "expectations": "shared/fixtures/parity_expected.json"
+      },
+      "signal_parity": {
+        "python": "scripts/parity_dump.py (mode: python) + scripts/gen_parity_signals.py",
+        "typescript": "app-ts/src/cli/paritySignals.ts",
+        "fixture": "shared/fixtures/parity_15m.csv",
+        "expectations": "shared/fixtures/parity_signals.json"
+      },
+      "trade_parity": {
+        "python": "scripts/trade_parity_dump.py",
+        "typescript": "app-ts/src/cli/tradeParityDump.ts",
+        "fixture": "shared/fixtures/trade_parity_15m.csv",
+        "note": "Drives the SHIPPED STRATEGY. The fixture is a test artefact and is not evidence that the strategy fires in real markets."
+      },
+      "execution_parity": {
+        "python": "scripts/execution_parity_dump.py",
+        "typescript": "app-ts/src/cli/executionParityDump.ts",
+        "expectations": "shared/fixtures/execution_parity.json",
+        "note": "Drives CONTROLLED signals, not the strategy. Validates the execution mechanics only: stop exits, target exits, gap fills, ambiguous bars, same-bar restrictions and the cost models. It is not evidence about the strategy."
+      }
+    },
+    "regeneration": {
+      "parity_expected": "python scripts/gen_parity_expected.py",
+      "parity_signals": "python scripts/gen_parity_signals.py",
+      "trade_parity_fixture": "python scripts/gen_trade_parity_fixture.py",
+      "execution_parity": "python scripts/execution_parity_dump.py"
+    },
+    "note": "The loaders are READ-ONLY. Where an engine currently hard-codes a value that the spec governs, the Stage 2 tests assert equality with the spec. Stage 3+ may then change the spec, and both engines will follow. A deliberate change to a spec value or to an engine's live value makes the consistency tests FAIL, which is the intended behaviour: drift cannot pass silently."
+  },
+  "status_conventions": {
+    "divergence_status": {
+      "resolved": "The two engines now behave identically. The difference was closed and must not be reintroduced.",
+      "open": "The two engines currently differ. The difference is recorded and unresolved.",
+      "deferred": "The difference is deliberate (for example market-specific execution economics) or out of scope for the current stage. It is not a defect."
+    },
+    "ambiguity_status": {
+      "open": "The source methodology does not determine this. It must be settled.",
+      "resolved": "The source methodology does not determine this, and an explicit interpretation has been adopted and recorded."
+    },
+    "note": "Every entry in engine_divergences and ambiguities_in_the_book carries a status field. A divergence is 'resolved' only when the two engines behave identically; it is 'deferred' when the difference is a deliberate market-specific choice rather than a defect; it is 'open' otherwise."
+  }
+}

@@ -26,8 +26,8 @@ export class DatabaseConnection {
    */
   static getInstance(dbPath?: string): DatabaseConnection {
     if (!DatabaseConnection.instance) {
-      const defaultPath = path.join(process.cwd(), 'data', 'shades.db');
-      DatabaseConnection.instance = new DatabaseConnection(dbPath || defaultPath);
+      const resolvedPath = dbPath || process.env.SHADES_DB_PATH || path.join(process.cwd(), 'data', 'shades.db');
+      DatabaseConnection.instance = new DatabaseConnection(resolvedPath);
     }
     return DatabaseConnection.instance;
   }

@@ -1,0 +1,22 @@
+{
+  "htf_timeframe": "4h",
+  "as_of_index": 400,
+  "n_htf_candles": 24,
+  "n_swing_highs": 2,
+  "n_swing_lows": 1,
+  "last_htf_close": "2024-01-05T12:00:00.000Z",
+  "trendlines": [
+    {
+      "type": "RESISTANCE",
+      "slope": -0.681925,
+      "intercept": 151.4158,
+      "start_idx": 8,
+      "end_idx": 16,
+      "touches": 2
+    }
+  ],
+  "entry_ts": "2024-01-05T13:15:00.000Z",
+  "prices_at": [
+    135.51842344
+  ]
+}

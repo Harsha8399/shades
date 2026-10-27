@@ -6,6 +6,16 @@
 
 // Data loaders
 export { CSVLoader } from './CSVLoader';
+export { 
+  NiftyHistoricalDownloader, 
+  NiftyHistoricalDownloader as NiftyDownloader,
+  NIFTY_INSTRUMENT_KEYS, 
+  DEFAULT_CACHE_CONFIG,
+  type CacheConfig, 
+  type DownloadConfig, 
+  type ValidationResult, 
+  type DownloadResult 
+} from './NiftyHistoricalDownloader';
 
 // Market calendar
 export { IndianMarketCalendar, Exchange, MarketSession as CalendarSession } from './IndianMarketCalendar';
@@ -39,5 +49,9 @@ export {
   UpstoxConfig,
   UpstoxInstrument,
   createUpstoxFeedFromEnv,
+  HISTORICAL_LIMITS,
+  TIMEFRAME_MAP_V3,
+  UPSTOX_API_BASE_V2,
+  UPSTOX_API_BASE_V3,
 } from './UpstoxFeed';
 

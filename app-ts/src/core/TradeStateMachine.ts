@@ -41,9 +41,15 @@ export class TradeStateMachine {
   
   /**
    * Transition trade to new state
+   *
+   * @param atTime Optional timestamp for the transition. When the engine is
+   *   replaying historical candles this MUST be the originating candle's
+   *   timestamp, so that a replayed trade is directly comparable with the
+   *   research engine bar for bar. When omitted, the wall clock is used
+   *   (live trading), which is the correct default for that case.
    * @throws Error if transition is invalid
    */
-  static transition(trade: Trade, newState: TradeState, reason: string, price: number): Trade {
+  static transition(trade: Trade, newState: TradeState, reason: string, price: number, atTime?: Date): Trade {
     if (!this.isValidTransition(trade.state, newState)) {
       throw new Error(
         `Invalid state transition: ${trade.state} -> ${newState}. ` +
@@ -54,7 +60,7 @@ export class TradeStateMachine {
     const transition: StateTransition = {
       from: trade.state,
       to: newState,
-      timestamp: new Date(),
+      timestamp: atTime ?? new Date(),
       reason,
       price,
     };
@@ -68,14 +74,14 @@ export class TradeStateMachine {
   /**
    * Open a pending trade (trigger entry)
    */
-  static openTrade(trade: Trade, entryPrice: number): Trade {
+  static openTrade(trade: Trade, entryPrice: number, atTime?: Date): Trade {
     if (trade.state !== 'PENDING') {
       throw new Error(`Cannot open trade in state ${trade.state}`);
     }
     
-    trade = this.transition(trade, 'OPEN', 'Entry triggered', entryPrice);
+    trade = this.transition(trade, 'OPEN', 'Entry triggered', entryPrice, atTime);
     trade.entryPrice = entryPrice;
-    trade.entryTime = new Date();
+    trade.entryTime = atTime ?? new Date();
     
     return trade;
   }
@@ -83,14 +89,14 @@ export class TradeStateMachine {
   /**
    * Close trade at target
    */
-  static closeTrade(trade: Trade, exitPrice: number): Trade {
+  static closeTrade(trade: Trade, exitPrice: number, atTime?: Date): Trade {
     if (trade.state !== 'OPEN') {
       throw new Error(`Cannot close trade in state ${trade.state}`);
     }
     
-    trade = this.transition(trade, 'CLOSED', 'Target hit', exitPrice);
+    trade = this.transition(trade, 'CLOSED', 'Target hit', exitPrice, atTime);
     trade.exitPrice = exitPrice;
-    trade.exitTime = new Date();
+    trade.exitTime = atTime ?? new Date();
     
     // Calculate P&L
     trade = this.calculatePnL(trade);
@@ -101,14 +107,14 @@ export class TradeStateMachine {
   /**
    * Stop trade at stop-loss
    */
-  static stopTrade(trade: Trade, exitPrice: number): Trade {
+  static stopTrade(trade: Trade, exitPrice: number, atTime?: Date): Trade {
     if (trade.state !== 'OPEN') {
       throw new Error(`Cannot stop trade in state ${trade.state}`);
     }
     
-    trade = this.transition(trade, 'STOPPED', 'Stop-loss hit', exitPrice);
+    trade = this.transition(trade, 'STOPPED', 'Stop-loss hit', exitPrice, atTime);
     trade.exitPrice = exitPrice;
-    trade.exitTime = new Date();
+    trade.exitTime = atTime ?? new Date();
     
     // Calculate P&L
     trade = this.calculatePnL(trade);
@@ -119,23 +125,23 @@ export class TradeStateMachine {
   /**
    * Cancel a pending trade
    */
-  static cancelTrade(trade: Trade, reason: string, price: number): Trade {
+  static cancelTrade(trade: Trade, reason: string, price: number, atTime?: Date): Trade {
     if (trade.state !== 'PENDING') {
       throw new Error(`Cannot cancel trade in state ${trade.state}`);
     }
     
-    return this.transition(trade, 'CANCELLED', reason, price);
+    return this.transition(trade, 'CANCELLED', reason, price, atTime);
   }
   
   /**
    * Expire a pending trade
    */
-  static expireTrade(trade: Trade, price: number): Trade {
+  static expireTrade(trade: Trade, price: number, atTime?: Date): Trade {
     if (trade.state !== 'PENDING') {
       throw new Error(`Cannot expire trade in state ${trade.state}`);
     }
     
-    return this.transition(trade, 'EXPIRED', 'Entry window expired', price);
+    return this.transition(trade, 'EXPIRED', 'Entry window expired', price, atTime);
   }
   
   /**

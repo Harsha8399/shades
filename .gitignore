@@ -9,6 +9,8 @@ venv/
 dist/
 dist-ssr/
 *.local
+*.egg-info/
+.eggs/
 
 # Data & DB (user-specific)
 app-ts/data/*.db
@@ -36,3 +38,10 @@ npm-debug.log*
 
 # OS
 Thumbs.db
+
+# Cross-engine parity harness artifacts
+research-py/tests/.artifacts/
+
+# Runtime config: written by ConfigManager at runtime; contains no secrets but may be overwritten
+# locally. Never commit.
+**/config/runtime.json

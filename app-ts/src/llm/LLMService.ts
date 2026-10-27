@@ -1,7 +1,7 @@
 /**
  * LLM Service
  * 
- * Manages communication with LLM providers (Ollama local, DeepSeek cloud, OpenAI cloud).
+ * Manages communication with LLM providers (Ollama local, DeepSeek cloud, OpenAI cloud, OpenRouter).
  * Acts as a trading analyst — analyzes results, explains weaknesses, suggests improvements.
  * The LLM is NEVER a decision-maker; it's an advisory layer.
  */
@@ -17,8 +17,10 @@ import {
   DEFAULT_OLLAMA_CONFIG,
   DEFAULT_DEEPSEEK_CONFIG,
   DEFAULT_OPENAI_CONFIG,
+  DEFAULT_OPENROUTER_CONFIG,
 } from './types';
 import { buildAnalysisPrompt } from './prompts';
+import { ConfigManager } from '../config/ConfigManager';
 
 /**
  * Raw LLM API response shapes
@@ -57,6 +59,10 @@ export class LLMService {
     this.configs.set('ollama', { ...DEFAULT_OLLAMA_CONFIG });
     this.configs.set('deepseek', { ...DEFAULT_DEEPSEEK_CONFIG });
     this.configs.set('openai', { ...DEFAULT_OPENAI_CONFIG });
+    this.configs.set('openrouter', { ...DEFAULT_OPENROUTER_CONFIG });
+    
+    // Sync with ConfigManager
+    this.syncWithConfigManager();
   }
 
   static getInstance(): LLMService {
@@ -64,6 +70,49 @@ export class LLMService {
       LLMService.instance = new LLMService();
     }
     return LLMService.instance;
+  }
+
+  /**
+   * Sync LLM configuration from ConfigManager
+   */
+  private syncWithConfigManager(): void {
+    const configManager = ConfigManager.getInstance();
+    const llmConfig = configManager.getLLM();
+    
+    // Update active provider
+    this.activeProvider = llmConfig.provider;
+    
+    // Update provider configs with API keys from ConfigManager
+    if (llmConfig.openrouterApiKey) {
+      const config = this.configs.get('openrouter');
+      if (config) {
+        this.configs.set('openrouter', { ...config, apiKey: llmConfig.openrouterApiKey });
+      }
+    }
+    if (llmConfig.deepseekApiKey) {
+      const config = this.configs.get('deepseek');
+      if (config) {
+        this.configs.set('deepseek', { ...config, apiKey: llmConfig.deepseekApiKey });
+      }
+    }
+    if (llmConfig.openaiApiKey) {
+      const config = this.configs.get('openai');
+      if (config) {
+        this.configs.set('openai', { ...config, apiKey: llmConfig.openaiApiKey });
+      }
+    }
+    if (llmConfig.ollamaBaseUrl) {
+      const config = this.configs.get('ollama');
+      if (config) {
+        this.configs.set('ollama', { ...config, baseUrl: llmConfig.ollamaBaseUrl });
+      }
+    }
+    if (llmConfig.ollamaModel) {
+      const config = this.configs.get('ollama');
+      if (config) {
+        this.configs.set('ollama', { ...config, model: llmConfig.ollamaModel });
+      }
+    }
   }
 
   // ─── Configuration ────────────────────────────────────────
@@ -133,7 +182,7 @@ export class LLMService {
           latencyMs: Date.now() - start,
         };
       } else {
-        // OpenAI-compatible health check (DeepSeek, OpenAI)
+        // OpenAI-compatible health check (DeepSeek, OpenAI, OpenRouter)
         const res = await fetchWithTimeout(`${config.baseUrl}/models`, {
           method: 'GET',
           headers: {

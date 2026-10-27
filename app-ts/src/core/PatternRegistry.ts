@@ -7,10 +7,10 @@ export class PatternRegistry {
   private patterns: Map<string, Pattern> = new Map();
   private static instance: PatternRegistry | null = null;
   
-  private constructor() {}
+  constructor() {}
   
   /**
-   * Get singleton instance
+   * Get singleton instance (used for global pattern registration at startup)
    */
   static getInstance(): PatternRegistry {
     if (!PatternRegistry.instance) {

@@ -2,6 +2,14 @@ import { Candle } from '../types';
 import { findSwingPoints, BasicSwingPoint } from './swingPoints';
 
 /**
+ * Minimum number of swing-point touches required for a valid trendline.
+ * Spec: TRENDLINE_MIN_TOUCHES = 2 (book-derived: "At least two touchpoints
+ * are required to draw a trendline." — p.6).  Exported so ConfluenceZonePattern
+ * and any other caller can import the same constant rather than hardcoding 2.
+ */
+export const TRENDLINE_MIN_TOUCHES = 2;
+
+/**
  * Trendline representation
  */
 export interface Trendline {
@@ -51,8 +59,8 @@ export function getTrendlinePrice(trendline: Trendline, index: number): number {
  * Find trendlines from swing points
  * 
  * @param candles - Array of OHLCV candles
- * @param tolerance - Price tolerance for touches (as ATR multiplier)
- * @param atr - Current ATR value
+ * @param atr - Current ATR value (used to compute absolute tolerance)
+ * @param tolerance - Touch tolerance as an ATR multiple (default: 0.3 per spec TRENDLINE_TOLERANCE_ATR)
  */
 export function findTrendlines(
   candles: Candle[],
@@ -79,7 +87,7 @@ export function findTrendlines(
         }
       }
       
-      if (touches >= 2) {
+      if (touches >= TRENDLINE_MIN_TOUCHES) {
         trendline.touches = touches;
         trendline.strength = touches / lows.length;
         trendlines.push(trendline);
@@ -103,7 +111,7 @@ export function findTrendlines(
         }
       }
       
-      if (touches >= 2) {
+      if (touches >= TRENDLINE_MIN_TOUCHES) {
         trendline.touches = touches;
         trendline.strength = touches / highs.length;
         trendlines.push(trendline);

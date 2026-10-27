@@ -19,43 +19,77 @@ class SRZone:
 
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> float:
-    """Calculate Average True Range."""
+    """
+    Calculate Average True Range using Wilder's smoothing.
+
+    This is the canonical ATR definition (Wilder, 1978) and reproduces the
+    `technicalindicators` library's ATR **exactly** -- the TypeScript engine
+    verifies the same numbers against that library, and the two engines must
+    derive identical ATR-derived tolerances.
+
+    The library's convention is:
+      * True Range[0] is high-low (there is no previous close on the first
+        bar) and is NOT used for seeding.
+      * The ATR is seeded with the simple mean of True Range[1 .. period].
+      * Each subsequent bar applies ``((atr * (period - 1)) + tr) / period``.
+
+    Edge case: with fewer than ``period + 1`` bars there is no previous close
+    to compute a true range from, so the simple average of the bar ranges is
+    returned. This matches the TypeScript fallback exactly.
+    """
     high = df['high']
     low = df['low']
     close = df['close'].shift(1)
-    
+
     tr1 = high - low
     tr2 = abs(high - close)
     tr3 = abs(low - close)
-    
+
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    atr = tr.rolling(window=period).mean().iloc[-1]
-    
-    return atr if not pd.isna(atr) else (high - low).mean()
+
+    if len(df) < period + 1:
+        # Not enough data for a true range: fall back to the average bar range.
+        return float((high - low).mean())
+
+    values = tr.values
+
+    # Seed with the simple mean of TR[1..period]. TR[0] has no previous close
+    # and is excluded, matching the library.
+    atr = float(values[1:period + 1].mean())
+    for value in values[period + 1:]:
+        atr = ((atr * (period - 1)) + float(value)) / period
+
+    return atr
 
 
 def find_sr_zones(
     df: pd.DataFrame,
     tolerance_atr: float = 0.5,
     min_touches: int = 2,
+    atr: Optional[float] = None,
 ) -> List[SRZone]:
     """
     Find support and resistance zones based on swing points.
-    
+
     Args:
         df: OHLCV DataFrame
         tolerance_atr: Zone tolerance as ATR multiplier
         min_touches: Minimum touches to validate zone
-    
+        atr: Pre-computed ATR. If None it is calculated from ``df``. Passing
+            the ATR explicitly is how the pattern layer works in both
+            engines: the ATR is computed once over the full decision window
+            and reused, rather than recomputed on a sub-sliced window.
+
     Returns:
         List of SRZone objects
     """
-    atr = calculate_atr(df)
+    if atr is None:
+        atr = calculate_atr(df)
     tolerance = atr * tolerance_atr
-    
+
     swing_highs, swing_lows = find_swing_points(df, 3, 3)
     zones = []
-    
+
     # Group swing highs into resistance zones
     resistance_zones = _group_swings_into_zones(
         swing_highs, df.index, tolerance, 'RESISTANCE', min_touches
